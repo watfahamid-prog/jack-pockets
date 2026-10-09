@@ -77,7 +77,6 @@ export const JackPocketsVideo: React.FC<{ manifest: VideoManifest }> = ({ manife
       ? <ShotView beat={activeBeat} shot={activeShot} frame={frame} fps={fps} />
       : <AbsoluteFill style={{ background: "#080808" }} />}
     <AbsoluteFill style={{ pointerEvents: "none", zIndex: 80 }}>
-      {activeBeat && <div style={{ position: "absolute", left: "5.5%", top: "4.5%", fontFamily: "Arial,sans-serif", fontSize: 15, fontWeight: 700, letterSpacing: 2.2, color: "rgba(255,255,255,.72)", textTransform: "uppercase", textShadow }}>{String(activeBeat.kind).replace(/-/g, " ")}</div>}
       {caption && <div style={{ position: "absolute", left: "12%", right: "12%", bottom: "6%", minHeight: 52, display: "flex", alignItems: "center", justifyContent: "center", padding: "8px 18px", boxSizing: "border-box", background: "rgba(0,0,0,.32)", fontFamily: "Arial,sans-serif", fontSize: "clamp(22px,2.15vw,40px)", fontWeight: 800, color: "#fff", textShadow: "0 2px 12px #000", textAlign: "center" }}>{caption}</div>}
       <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 3, background: "rgba(255,255,255,.16)" }}>
         <div style={{ height: "100%", width: `${Math.min(100, time / manifest.duration * 100)}%`, background: "#e8c547" }} />
