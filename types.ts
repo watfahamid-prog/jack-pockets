@@ -1,0 +1,15 @@
+export type BeatKind="cold-open"|"context"|"escalation"|"reveal"|"fallout"|"ending";
+export type RenderProfile="youtube";
+export type AssetKind="photo"|"video"|"generated"|"document"|"texture"|"map"|"screenshot";
+export type OverlayKind="headline"|"label"|"stat"|"stamp"|"quote"|"source"|"location"|"redaction"|"keyword"|"arrow"|"circle";
+export type MotionKind="static"|"push"|"pull"|"pan"|"whip"|"shake"|"parallax"|"freeze";
+export type CutReason="sentence-change"|"claim"|"reveal"|"emphasis"|"evidence"|"pace";
+export type EditorialIntent="setup"|"evidence"|"explain"|"contrast"|"reveal"|"consequence"|"punchline";
+export type EditAction={type:"cut"|"zoom"|"pan"|"shake"|"flash"|"blur"|"freeze"|"glitch"|"paper"|"mask"|"whip";at:number;duration:number;intensity:number;reason?:CutReason};
+export type Layer={id:string;kind:"image"|"document"|"text"|"shape"|"arrow"|"highlight"|"label"|"screen";assetId?:string;text?:string;x:number;y:number;width:number;height:number;rotation:number;opacity:number;z:number;animation:MotionKind};
+export type SfxCue={src:string;at:number;gain:number;duck?:number;label?:string};
+export type VisualAsset={id:string;kind:AssetKind;src:string;credit?:string;license?:string;score:number;crop?:{x:number;y:number;scale:number};role?:string};
+export type Word={word:string;start:number;end:number};
+export type Shot={id:string;start:number;end:number;reason:CutReason;intent:EditorialIntent;assetIds:string[];layers:Layer[];actions:EditAction[];sfx:SfxCue[];intensity:number};
+export type Beat={id:string;kind:BeatKind;narration:string;start:number;end:number;intensity:number;keywords:string[];assets:VisualAsset[];overlays:Array<{type:OverlayKind;text:string}>;actions:EditAction[];sfx:SfxCue[];shots:Shot[]};
+export type VideoManifest={title:string;topic:string;duration:number;fps:number;width:number;height:number;audioSrc:string;musicSrc?:string;beats:Beat[];captions:Word[];sources?:string[];version:number};
