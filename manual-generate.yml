@@ -54,9 +54,14 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           TTS_VOICE: en-US-GuyNeural
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          ELEVENLABS_VOICE_ID: ${{ secrets.ELEVENLABS_VOICE_ID }}
+          ELEVENLABS_MODEL_ID: eleven_multilingual_v2
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
-        run: python scripts/generate.py --topic "${{ inputs.topic }}"
+          MUSIC_URL: ${{ secrets.MUSIC_URL }}
+          DOCUMENTARY_TOPIC: ${{ inputs.topic }}
+        run: python generate.py --topic "$DOCUMENTARY_TOPIC" --assets-per-beat 2
 
       - name: Upload documentary
         uses: actions/upload-artifact@v4
