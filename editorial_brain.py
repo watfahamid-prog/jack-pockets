@@ -107,10 +107,15 @@ def build_shots(beat, seed=42, aligned_words=None, sentences_override=None):
         layers = []
         chosen = None
         if assets:
+            # Use every distinct asset before reusing any clip. Within that set,
+            # prioritize actual moving footage and sentence relevance.
+            unused_assets = [asset for asset in assets if used_counts.get(str(asset["id"]), 0) == 0]
+            pool = unused_assets or assets
             ranked = sorted(
-                assets,
+                pool,
                 key=lambda asset: (
-                    _asset_score(asset, terms, role) - used_counts.get(str(asset["id"]), 0) * 7.0,
+                    _asset_score(asset, terms, role),
+                    str(asset.get("kind", "")).lower() == "video",
                     str(asset["id"]),
                 ),
                 reverse=True,
