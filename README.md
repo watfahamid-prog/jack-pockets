@@ -44,3 +44,6 @@ Optional:
 - The quality gate checks structure, timing, captions, and audio source; final FFprobe checks verify a 1080p60 MP4 with an audio stream.
 
 Stock search can still return weak matches, and high-quality footage depends on the available provider results and API quota. Always review the rendered artifact before publishing.
+
+
+Continuous validation also compiles every Python module with `python -m compileall -q .` before a generation run can reach any API calls.
