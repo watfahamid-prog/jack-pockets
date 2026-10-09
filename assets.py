@@ -29,7 +29,7 @@ def search_pexels_videos(query:str,out:Path,limit:int=2)->list[dict]:
         return []
     out.mkdir(parents=True,exist_ok=True)
     print(f"[pexels] video search: {query[:120]!r}")
-    data=_get("https://api.pexels.com/v1/videos/search",key,{"query":query[:180],"per_page":max(3,limit*3),"orientation":"landscape","size":"medium","locale":"en-US"})
+    data=_get("https://api.pexels.com/videos/search",key,{"query":query[:180],"per_page":max(3,limit*3),"orientation":"landscape","size":"medium","locale":"en-US"})
     videos=data.get("videos",[])
     print(f"[pexels] video results={len(videos)} total={data.get('total_results',0)}")
     result=[]

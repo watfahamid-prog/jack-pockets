@@ -1,6 +1,25 @@
 {
-  "name":"jack-pockets-autovideo","version":"1.0.0","private":true,"type":"module",
-  "scripts":{"generate":"python scripts/generate.py","render":"remotion render src/index.tsx JackPocketsVideo out/video.mp4","preview":"remotion studio src/index.tsx","typecheck":"tsc --noEmit"},
-  "dependencies":{"@remotion/cli":"latest","@remotion/captions":"latest","remotion":"latest","react":"latest","react-dom":"latest","zod":"4.5.4"},
-  "devDependencies":{"@types/react":"latest","@types/react-dom":"latest","typescript":"latest"}
+  "name": "jack-pockets-autovideo",
+  "version": "1.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "python generate.py",
+    "render": "remotion render index.tsx JackPocketsVideo",
+    "preview": "remotion studio index.tsx",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@remotion/cli": "latest",
+    "@remotion/captions": "latest",
+    "remotion": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "typescript": "latest"
+  }
 }

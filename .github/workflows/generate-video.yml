@@ -1,0 +1,86 @@
+name: Generate Jack Pockets Style Documentary
+
+on:
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: "Original documentary topic"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jack-pockets-documentary
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install Node dependencies
+        run: npm install
+
+      - name: Install Python dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Validate code and toolchain before using API quota
+        run: |
+          python --version
+          node --version
+          ffmpeg -version
+          python -m compileall -q .
+          npm run typecheck
+          test -f generate.py
+          test -f audio_aligner.py
+          test -f index.tsx
+          test -f JackPocketsVideo.tsx
+
+      - name: Generate documentary
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ secrets.GEMINI_MODEL }}
+          GEMINI_EDITOR_MODEL: ${{ secrets.GEMINI_EDITOR_MODEL }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          ELEVENLABS_VOICE_ID: ${{ secrets.ELEVENLABS_VOICE_ID }}
+          ELEVENLABS_MODEL_ID: eleven_multilingual_v2
+          TTS_VOICE: en-US-GuyNeural
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+          MUSIC_URL: ${{ secrets.MUSIC_URL }}
+        run: python generate.py --topic "${{ inputs.topic }}" --assets-per-beat 2
+
+      - name: Upload documentary and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jack-pockets-documentary-${{ github.run_number }}
+          path: |
+            out/*.mp4
+            public/runs/
+          if-no-files-found: warn
+          retention-days: 14
