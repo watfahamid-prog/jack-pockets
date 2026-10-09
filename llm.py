@@ -7,29 +7,21 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-MIN_NARRATION_WORDS = 1200
+MIN_NARRATION_WORDS = 1400
 
 SYSTEM = """You are the editorial brain for an automated premium documentary editor.
-Create an ORIGINAL factual long-form documentary plan. Do not imitate any named creator.
+Create an ORIGINAL factual long-form documentary plan. Do not copy any existing creator's script, wording, or finished video.
 
-The normal finished video must be 8-14 minutes. Write enough real narration to support that duration:
-target roughly 1,400-2,100 spoken words total (about 150 words/minute). Complex topics may naturally
-expand toward 30 minutes, but never pad a story just to hit a runtime.
+Target a finished documentary around 8-14 minutes. Aim for roughly 1,500-2,100 spoken words at a natural documentary pace. Do not pad the story just to hit a runtime.
 
-Use a strong narrative arc: cold-open, context, escalation, competing explanations/evidence, reveal,
-fallout and ending. Make every beat advance the story. Every sentence should have a visual reason,
-and factual claims should be specific enough to research.
+Use a strong narrative arc: cinematic cold-open, context, escalation, evidence and competing explanations, reveal, fallout, and a memorable ending. Every beat must advance the story. Every sentence should have a visual reason, and factual claims should be specific enough to research.
 
-Return ONLY valid JSON with 8-14 beats. Each beat needs narration, intensity 0-1, keywords, overlays
-and a visual intent. Do not write placeholder narration, repeated filler, or generic one-line beats.
-Do not wrap the JSON in Markdown fences. Do not add commentary before or after the JSON."""
+Return ONLY valid JSON with 8-14 beats. Each beat needs a concise title, narration, intensity 0-1, keywords, overlays, and visual intent. Narration must be detailed, natural, and original. Do not write placeholder narration, repeated filler, or generic one-line beats. Do not wrap the JSON in Markdown fences. Do not add commentary before or after the JSON."""
 
 def _parse_json(text: str):
-    """Parse strict JSON, while tolerating accidental Markdown fences or leading/trailing prose."""
     raw = str(text or "").strip()
     if not raw:
         raise ValueError("LLM returned an empty response")
-
     try:
         return json.loads(raw)
     except json.JSONDecodeError as first_error:
@@ -40,20 +32,14 @@ def _parse_json(text: str):
                 return json.loads(cleaned)
             except json.JSONDecodeError:
                 pass
-
         decoder = json.JSONDecoder()
-        starts = [i for i, ch in enumerate(raw) if ch in "[{"]
-        for start in starts:
+        for start in (index for index, char in enumerate(raw) if char in "[{"):
             try:
                 value, _ = decoder.raw_decode(raw[start:])
                 return value
             except json.JSONDecodeError:
                 continue
-
-        raise ValueError(
-            f"LLM returned invalid JSON: {first_error.msg} at line "
-            f"{first_error.lineno} column {first_error.colno}"
-        ) from first_error
+        raise ValueError(f"LLM returned invalid JSON: {first_error.msg} at line {first_error.lineno} column {first_error.colno}") from first_error
 
 def _normalize_plan(value, topic: str) -> dict:
     if isinstance(value, list):
@@ -75,83 +61,63 @@ def _normalize_plan(value, topic: str) -> dict:
     else:
         raise ValueError("LLM returned an unsupported documentary plan shape")
 
-    valid_beats = [b for b in plan["beats"] if isinstance(b, dict) and str(b.get("narration", "")).strip()]
+    valid_beats = [beat for beat in plan["beats"] if isinstance(beat, dict) and str(beat.get("narration", "")).strip()]
     if len(valid_beats) < 8:
         raise ValueError(f"LLM returned only {len(valid_beats)} usable beats; need at least 8")
-
     plan["beats"] = valid_beats
-    words = sum(len(str(b.get("narration", "")).split()) for b in valid_beats)
+    words = sum(len(str(beat.get("narration", "")).split()) for beat in valid_beats)
     if words < MIN_NARRATION_WORDS:
-        raise ValueError(
-            f"LLM returned only {words} narration words; a long-form plan needs at least "
-            f"{MIN_NARRATION_WORDS}"
-        )
+        raise ValueError(f"LLM returned only {words} narration words; a long-form plan needs at least {MIN_NARRATION_WORDS}")
     return plan
 
 def _gemini(topic: str) -> dict:
     from google import genai
     from google.genai import types
-
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-    model = os.getenv("GEMINI_MODEL") or "gemini-3.5-flash-lite"
+    model = os.getenv("GEMINI_MODEL") or "gemini-2.5-flash"
     prompt = f"{SYSTEM}\n\nBuild a complete long-form documentary plan about: {topic}"
-
     last_error = None
     for attempt in range(2):
         try:
-            r = client.models.generate_content(
-                model=model,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    temperature=0.7 if attempt == 0 else 0.25,
-                    response_mime_type="application/json",
-                ),
+            response = client.models.generate_content(
+                model=model, contents=prompt,
+                config=types.GenerateContentConfig(temperature=0.65 if attempt == 0 else 0.25, response_mime_type="application/json"),
             )
-            return _normalize_plan(_parse_json(r.text), topic)
+            return _normalize_plan(_parse_json(response.text), topic)
         except Exception as exc:
             last_error = exc
             if attempt == 0:
-                print(f"[llm] Gemini JSON attempt 1 failed; retrying with stricter decoding: {exc}")
+                print(f"[llm] Gemini plan attempt 1 failed; retrying: {exc}", flush=True)
     raise last_error
 
 def _openai(topic: str) -> dict:
     from openai import OpenAI
-
-    c = OpenAI()
-    r = c.chat.completions.create(
+    client = OpenAI()
+    response = client.chat.completions.create(
         model=os.getenv("OPENAI_MODEL") or "gpt-4o-mini",
         response_format={"type": "json_object"},
         messages=[
             {"role": "system", "content": SYSTEM},
             {"role": "user", "content": f"Build a complete long-form documentary plan about: {topic}"},
         ],
-        temperature=0.7,
+        temperature=0.65,
     )
-    return _normalize_plan(_parse_json(r.choices[0].message.content), topic)
+    return _normalize_plan(_parse_json(response.choices[0].message.content), topic)
 
 def _anthropic(topic: str) -> dict:
     from anthropic import Anthropic
-
-    c = Anthropic()
-    r = c.messages.create(
+    client = Anthropic()
+    response = client.messages.create(
         model=os.getenv("ANTHROPIC_MODEL") or "claude-3-5-sonnet-latest",
-        max_tokens=7000,
+        max_tokens=9000,
         system=SYSTEM,
-        messages=[
-            {"role": "user", "content": f"Build a complete long-form documentary plan about: {topic}"}
-        ],
+        messages=[{"role": "user", "content": f"Build a complete long-form documentary plan about: {topic}"}],
     )
-    return _normalize_plan(_parse_json(r.content[0].text), topic)
+    return _normalize_plan(_parse_json(response.content[0].text), topic)
 
 def generate(topic: str) -> dict:
     provider = os.getenv("LLM_PROVIDER", "auto").lower()
-    order = {
-        "gemini": ["gemini"],
-        "openai": ["openai"],
-        "anthropic": ["anthropic"],
-        "auto": ["gemini", "openai", "anthropic"],
-    }.get(provider, ["gemini", "openai", "anthropic"])
-
+    order = {"gemini": ["gemini"], "openai": ["openai"], "anthropic": ["anthropic"], "auto": ["gemini", "openai", "anthropic"]}.get(provider, ["gemini", "openai", "anthropic"])
     attempted = []
     for name in order:
         try:
@@ -163,15 +129,7 @@ def generate(topic: str) -> dict:
                 return _anthropic(topic)
         except Exception as exc:
             attempted.append(f"{name}: {exc}")
-            print(f"[llm] {name} failed: {exc}")
-
+            print(f"[llm] {name} failed: {exc}", flush=True)
     if attempted:
-        raise RuntimeError(
-            "No configured LLM produced a valid long-form plan. "
-            + " | ".join(attempted)
-        )
-
-    raise RuntimeError(
-        "No LLM API key is configured. Set GEMINI_API_KEY (recommended) "
-        "or another supported provider secret."
-    )
+        raise RuntimeError("No configured LLM produced a valid long-form plan. " + " | ".join(attempted))
+    raise RuntimeError("No LLM API key is configured. Set GEMINI_API_KEY or another supported provider secret.")
