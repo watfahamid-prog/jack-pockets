@@ -87,7 +87,7 @@ def main() -> None:
 
         for query in queries[:args.assets_per_beat]:
             try:
-                videos = search_pexels_videos(query, root / f"assets-{index}", limit=2)
+                videos = search_pexels_videos(query, root / f"assets-{index}", limit=4)
             except Exception as exc:
                 print(f"[assets] video search failed for beat {index + 1}: {exc}", flush=True)
                 videos = []
@@ -95,7 +95,7 @@ def main() -> None:
             candidates = videos
             if not candidates:
                 try:
-                    candidates = search_pexels(query, root / f"assets-{index}", limit=2)
+                    candidates = search_pexels(query, root / f"assets-{index}", limit=3)
                 except Exception as exc:
                     print(f"[assets] photo fallback failed for beat {index + 1}: {exc}", flush=True)
                     candidates = []
