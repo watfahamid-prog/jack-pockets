@@ -183,10 +183,10 @@ def _commons_search(query:str,out:Path,limit:int=3,kind:str="video")->list[dict]
     clean = re.sub(r"\s+", " ", clean).strip()[:110]
     if not clean:
         return []
-    file_filter = "filetype:video" if kind == "video" else "filetype:bitmap"
+    # Search broadly: Commons generator search does not reliably support filetype operators.
     params = {
         "action": "query", "format": "json", "generator": "search",
-        "gsrnamespace": 6, "gsrsearch": f"{file_filter} {clean}",
+        "gsrnamespace": 6, "gsrsearch": clean,
         "gsrlimit": max(8, limit * 5), "prop": "imageinfo",
         "iiprop": "url|mime|extmetadata", "iiurlwidth": 1280,
     }
