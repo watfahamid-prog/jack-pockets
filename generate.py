@@ -89,64 +89,63 @@ def main() -> None:
     asset_sets = []
     used_asset_ids: set[str] = set()
     for index, beat in enumerate(plan.get("beats", [])):
-        title = str(beat.get("title", ""))
-        beat_keywords = [str(x) for x in beat.get("keywords", []) if str(x).strip()]
+        title = str(beat.get("title", "")).strip()
+        beat_keywords = [str(x).strip() for x in beat.get("keywords", []) if str(x).strip()]
         narration_text = str(beat.get("narration", "")).strip()
-        first_sentence = re.split(r"(?<=[.!?])\s+", narration_text)[0][:180]
-        # Search using concise visual subjects rather than long narration sentences.
-        queries = list(dict.fromkeys([
-            beat_keywords[0] if beat_keywords else f"{title} archival footage",
-            beat_keywords[1] if len(beat_keywords) > 1 else title,
-        ]))
+        first_sentence = re.split(r"(?<=[.!?])\\s+", narration_text)[0][:180]
+        # Search meaningful visual phrases, not isolated first/second keywords.
+        keyword_phrase = " ".join(beat_keywords[:3])
+        queries = list(dict.fromkeys(q for q in [
+            title,
+            keyword_phrase,
+            first_sentence,
+        ] if q))
+        queries = queries[:min(2, args.assets_per_beat)]
         stock_assets = []
         generated_assets = []
 
-        for query in queries[:args.assets_per_beat]:
-            try:
-                videos = search_pexels_videos(query, root / f"assets-{index}", limit=4)
-            except Exception as exc:
-                print(f"[assets] video search failed for beat {index + 1}: {exc}", flush=True)
-                videos = []
+        for query in queries:
+            asset_dir = root / f"assets-{index}"
+            videos = []
+            # Start with the highest-yield provider, then diversify if we have too few
+            # moving shots. This avoids accepting the first weak result as "good enough".
+            providers = [
+                ("Pexels", lambda: search_pexels_videos(query, asset_dir, limit=4)),
+                ("Pixabay", lambda: search_pixabay_videos(query, asset_dir, limit=3)),
+                ("Wikimedia Commons", lambda: search_commons_videos(query, asset_dir, limit=3)),
+                ("Internet Archive", lambda: search_archive_videos(query, asset_dir, limit=3)),
+            ]
+            for provider_name, search in providers:
+                if len(videos) >= 3:
+                    break
+                try:
+                    found = search()
+                except Exception as exc:
+                    print(f"[assets] {provider_name} video search failed for beat {index + 1}: {exc}", flush=True)
+                    found = []
+                for item in found:
+                    if item.get("id") and item["id"] not in {x.get("id") for x in videos}:
+                        videos.append(item)
+                # Avoid over-searching once at least two moving candidates exist.
+                if len(videos) >= 2:
+                    break
 
             candidates = videos
-            # Prefer real moving footage from either free stock provider before photos.
+            # Photos are a last resort; never let one photo search replace available motion footage.
             if not candidates:
-                try:
-                    candidates = search_pixabay_videos(query, root / f"assets-{index}", limit=4)
-                except Exception as exc:
-                    print(f"[assets] Pixabay video fallback failed for beat {index + 1}: {exc}", flush=True)
-                    candidates = []
-            if not candidates:
-                try:
-                    candidates = search_commons_videos(query, root / f"assets-{index}", limit=3)
-                except Exception as exc:
-                    print(f"[assets] Wikimedia video fallback failed for beat {index + 1}: {exc}", flush=True)
-                    candidates = []
-            # Free, keyless fallback for openly licensed real footage.
-            if not candidates:
-                try:
-                    candidates = search_archive_videos(query, root / f"assets-{index}", limit=3)
-                except Exception as exc:
-                    print(f"[assets] Internet Archive video fallback failed for beat {index + 1}: {exc}", flush=True)
-                    candidates = []
-            if not candidates:
-                try:
-                    candidates = search_pexels(query, root / f"assets-{index}", limit=3)
-                except Exception as exc:
-                    print(f"[assets] Pexels photo fallback failed for beat {index + 1}: {exc}", flush=True)
-                    candidates = []
-            if not candidates:
-                try:
-                    candidates = search_pixabay(query, root / f"assets-{index}", limit=3)
-                except Exception as exc:
-                    print(f"[assets] Pixabay photo fallback failed for beat {index + 1}: {exc}", flush=True)
-                    candidates = []
-            if not candidates:
-                try:
-                    candidates = search_commons_photos(query, root / f"assets-{index}", limit=3)
-                except Exception as exc:
-                    print(f"[assets] Wikimedia photo fallback failed for beat {index + 1}: {exc}", flush=True)
-                    candidates = []
+                photo_providers = [
+                    ("Pexels", lambda: search_pexels(query, asset_dir, limit=3)),
+                    ("Pixabay", lambda: search_pixabay(query, asset_dir, limit=3)),
+                    ("Wikimedia Commons", lambda: search_commons_photos(query, asset_dir, limit=3)),
+                ]
+                for provider_name, search in photo_providers:
+                    try:
+                        candidates = search()
+                    except Exception as exc:
+                        print(f"[assets] {provider_name} photo search failed for beat {index + 1}: {exc}", flush=True)
+                        candidates = []
+                    if candidates:
+                        break
 
             for item in candidates:
                 asset_id = str(item.get("id", ""))
@@ -157,6 +156,7 @@ def main() -> None:
                 item["query"] = query
                 item["keywords"] = beat_keywords
                 item["beat_title"] = title
+                item["beat_narration"] = first_sentence
                 item["src"] = public_path(Path(item["src"]))
                 stock_assets.append(item)
 
@@ -176,7 +176,7 @@ def main() -> None:
 
         beat_assets = stock_assets + generated_assets
         print(
-            f"[assets] beat={index + 1} footage={sum(x.get('kind') == 'video' for x in stock_assets)} "
+            f"[assets] beat={index + 1} moving_clips={sum(x.get('kind') == 'video' for x in stock_assets)} "
             f"photos={sum(x.get('kind') == 'photo' for x in stock_assets)} graphics={len(generated_assets)}",
             flush=True,
         )
