@@ -1,8 +1,12 @@
 from __future__ import annotations
 import html, os, re, requests
 from pathlib import Path
+from urllib.parse import urlparse
 from dotenv import load_dotenv
 load_dotenv()
+
+_PEXELS_DISABLED = False
+
 
 def _pexels_key()->str:
     key=os.getenv("PEXELS_API_KEY","").strip()
@@ -10,9 +14,14 @@ def _pexels_key()->str:
     return key
 
 def _get(url:str,key:str,params:dict)->dict:
+    global _PEXELS_DISABLED
+    if _PEXELS_DISABLED:
+        raise RuntimeError("Pexels disabled after an authentication/authorization failure")
     r=requests.get(url,headers={"Authorization":key},params=params,timeout=45)
+    if r.status_code in (401, 403):
+        _PEXELS_DISABLED = True
     if not r.ok:
-        raise RuntimeError(f"Pexels HTTP {r.status_code}: {r.text[:240].replace(chr(10),' ')}")
+        raise RuntimeError(f"Pexels HTTP {r.status_code}: {r.text[:240].replace(chr(10), ' ')}")
     return r.json()
 
 def _download(url,path):
@@ -160,6 +169,83 @@ def search_pixabay(query:str,out:Path,limit:int=3)->list[dict]:
         except Exception as exc:
             print(f"[pixabay] photo download failed id={photo_id}: {exc}")
     return result
+
+def _commons_search(query:str,out:Path,limit:int=3,kind:str="video")->list[dict]:
+    """Find openly licensed Wikimedia Commons media without requiring an API key."""
+    out.mkdir(parents=True, exist_ok=True)
+    clean = re.sub(r"[^a-zA-Z0-9 \"'-]", " ", str(query))
+    clean = re.sub(r"\s+", " ", clean).strip()[:110]
+    if not clean:
+        return []
+    file_filter = "filetype:video" if kind == "video" else "filetype:bitmap"
+    params = {
+        "action": "query", "format": "json", "generator": "search",
+        "gsrnamespace": 6, "gsrsearch": f"{file_filter} {clean}",
+        "gsrlimit": max(8, limit * 5), "prop": "imageinfo",
+        "iiprop": "url|mime|extmetadata", "iiurlwidth": 1280,
+    }
+    headers = {"User-Agent": "JackPocketsDocumentary/1.0 (media search; https://github.com/watfahamid-prog/jack-pockets)"}
+    response = requests.get("https://commons.wikimedia.org/w/api.php", params=params, headers=headers, timeout=45)
+    if not response.ok:
+        raise RuntimeError(f"Wikimedia Commons API HTTP {response.status_code}: {response.text[:240]}")
+    pages = (response.json().get("query") or {}).get("pages") or {}
+    result = []
+    for page in pages.values():
+        info_list = page.get("imageinfo") or []
+        if not info_list:
+            continue
+        info = info_list[0]
+        mime = str(info.get("mime") or "").lower()
+        original = info.get("url") or ""
+        thumb = info.get("thumburl") or ""
+        if kind == "video":
+            if not (mime.startswith("video/") or re.search(r"\.(mp4|webm|ogv|ogg|mov)(?:$|\?)", original, re.I)):
+                continue
+            src = thumb if str(info.get("thumbmime") or "").startswith("video/") else original
+            ext = os.path.splitext(urlparse(src).path)[1].lower() or ".webm"
+            if ext not in {".mp4", ".webm", ".ogv", ".ogg", ".mov"}:
+                ext = ".webm"
+        else:
+            if not mime.startswith("image/") or mime == "image/svg+xml":
+                continue
+            src = thumb or original
+            ext = os.path.splitext(urlparse(src).path)[1].lower() or ".jpg"
+            if ext not in {".jpg", ".jpeg", ".png", ".webp"}:
+                ext = ".jpg"
+        page_id = str(page.get("pageid") or re.sub(r"[^a-zA-Z0-9]+", "-", page.get("title", "commons")).strip("-"))
+        asset_id = f"commons-{kind}-{page_id}"
+        path = out / f"{asset_id}{ext}"
+        try:
+            if not path.exists():
+                _download(src, path)
+            if path.stat().st_size < 5000:
+                path.unlink(missing_ok=True)
+                continue
+            metadata = info.get("extmetadata") or {}
+            artist_value = metadata.get("Artist", {}).get("value", "") if isinstance(metadata.get("Artist"), dict) else ""
+            artist = re.sub(r"<[^>]+>", " ", str(artist_value)).strip()[:180]
+            license_value = metadata.get("LicenseShortName", {}).get("value", "Wikimedia Commons") if isinstance(metadata.get("LicenseShortName"), dict) else "Wikimedia Commons"
+            result.append({
+                "id": asset_id, "kind": kind, "src": str(path), "credit": artist or "Wikimedia Commons contributor",
+                "license": f"Wikimedia Commons / {license_value}", "source_url": "https://commons.wikimedia.org/wiki/" + str(page.get("title", "")).replace(" ", "_"),
+                "score": 1.0, "role": "b-roll", "query": clean,
+            })
+            print(f"[commons] selected {kind}={page.get('title')} bytes={path.stat().st_size}", flush=True)
+            if len(result) >= limit:
+                break
+        except Exception as exc:
+            print(f"[commons] download failed title={page.get('title')}: {exc}", flush=True)
+    print(f"[commons] {kind} results={len(result)} query={clean!r}", flush=True)
+    return result
+
+
+def search_commons_videos(query:str,out:Path,limit:int=4)->list[dict]:
+    return _commons_search(query, out, limit, "video")
+
+
+def search_commons_photos(query:str,out:Path,limit:int=3)->list[dict]:
+    return _commons_search(query, out, limit, "photo")
+
 
 def make_asset_plan(sentence:str,editorial:dict|None=None)->list[dict]:
     low=sentence.lower();roles=[]
