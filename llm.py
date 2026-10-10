@@ -84,10 +84,10 @@ def _research_prompt(topic: str, research: list[dict] | None) -> str:
             "content": str(item.get("content", ""))[:1000],
         })
     return (
-        f"{SYSTEM}\\n\\nBuild a complete long-form documentary plan about: {topic}\\n\\n"
-        "RESEARCH MATERIAL (use only relevant material; do not claim sources prove more than they say):\\n"
+        f"{SYSTEM}\n\nBuild a complete long-form documentary plan about: {topic}\n\n"
+        "RESEARCH MATERIAL (use only relevant material; do not claim sources prove more than they say):\n"
         + json.dumps(safe_sources, ensure_ascii=False)
-        + "\\n\\nReturn source_urls on every beat, using only exact URLs listed above. "
+        + "\n\nReturn source_urls on every beat, using only exact URLs listed above. "
           "When this material is insufficient, keep the claim modest or omit it; never fabricate citations."
     )
 
