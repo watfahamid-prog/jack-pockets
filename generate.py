@@ -93,7 +93,7 @@ def main() -> None:
         title = str(beat.get("title", "")).strip()
         beat_keywords = [str(x).strip() for x in beat.get("keywords", []) if str(x).strip()]
         narration_text = str(beat.get("narration", "")).strip()
-        first_sentence = re.split(r"(?<=[.!?])\\s+", narration_text)[0][:180]
+        first_sentence = re.split(r"(?<=[.!?])\s+", narration_text)[0][:180]
         # Search meaningful visual phrases, not isolated first/second keywords.
         keyword_phrase = " ".join(beat_keywords[:3])
         queries = list(dict.fromkeys(q for q in [
