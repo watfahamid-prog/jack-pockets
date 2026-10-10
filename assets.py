@@ -69,6 +69,98 @@ def search_pexels(query:str,out:Path,limit:int=3)->list[dict]:
             print(f"[pexels] photo download failed id={p.get('id')}: {e}")
     return result
 
+
+def _pixabay_key()->str:
+    key=os.getenv("PIXABAY_API_KEY","").strip()
+    print(f"[pixabay] key configured={'yes' if key else 'no'}")
+    return key
+
+def search_pixabay_videos(query:str,out:Path,limit:int=4)->list[dict]:
+    """Search and download a small set of Pixabay videos as a Pexels fallback."""
+    key=_pixabay_key()
+    if not key:
+        print("[pixabay] no API key; skipping video search")
+        return []
+    out.mkdir(parents=True,exist_ok=True)
+    clean_query=query[:100]
+    print(f"[pixabay] video search: {clean_query[:120]!r}")
+    response=requests.get("https://pixabay.com/api/videos/",params={
+        "key":key,"q":clean_query,"per_page":max(3,min(60,limit*3)),
+        "safesearch":"true","lang":"en","video_type":"film",
+    },timeout=45)
+    if not response.ok:
+        raise RuntimeError(f"Pixabay video API HTTP {response.status_code}: {response.text[:240]}")
+    hits=response.json().get("hits",[])
+    print(f"[pixabay] video results={len(hits)}")
+    result=[]
+    for video in hits:
+        variants=video.get("videos") or {}
+        chosen=None
+        for size in ("large","medium","small","tiny"):
+            candidate=variants.get(size) or {}
+            if candidate.get("url"):
+                chosen=candidate
+                break
+        if not chosen:
+            continue
+        vid=str(video.get("id",""))
+        if not vid:
+            continue
+        path=out/f"pixabay-video-{vid}.mp4"
+        try:
+            if not path.exists():
+                _download(chosen["url"],path)
+            result.append({
+                "id":f"pixabay-video-{vid}","kind":"video","src":str(path),
+                "credit":video.get("user"),"license":"Pixabay","source_url":video.get("pageURL"),
+                "score":1.0,"role":"b-roll","duration":float(video.get("duration") or 0),
+                "width":chosen.get("width"),"height":chosen.get("height"),
+            })
+            print(f"[pixabay] selected video={vid} {chosen.get('width')}x{chosen.get('height')}")
+            if len(result)>=limit:
+                break
+        except Exception as exc:
+            print(f"[pixabay] video download failed id={vid}: {exc}")
+    return result
+
+def search_pixabay(query:str,out:Path,limit:int=3)->list[dict]:
+    """Search and download Pixabay photos when Pexels photo results are unavailable."""
+    key=_pixabay_key()
+    if not key:
+        print("[pixabay] no API key; skipping photo search")
+        return []
+    out.mkdir(parents=True,exist_ok=True)
+    clean_query=query[:100]
+    print(f"[pixabay] photo search: {clean_query[:120]!r}")
+    response=requests.get("https://pixabay.com/api/",params={
+        "key":key,"q":clean_query,"image_type":"photo","orientation":"horizontal",
+        "per_page":max(3,min(60,limit*2)),"safesearch":"true","lang":"en",
+    },timeout=45)
+    if not response.ok:
+        raise RuntimeError(f"Pixabay photo API HTTP {response.status_code}: {response.text[:240]}")
+    result=[]
+    for photo in response.json().get("hits",[]):
+        src=photo.get("fullHDURL") or photo.get("largeImageURL") or photo.get("webformatURL")
+        if not src:
+            continue
+        photo_id=str(photo.get("id",""))
+        if not photo_id:
+            continue
+        path=out/f"pixabay-photo-{photo_id}.jpg"
+        try:
+            if not path.exists():
+                _download(src,path)
+            result.append({
+                "id":f"pixabay-photo-{photo_id}","kind":"photo","src":str(path),
+                "credit":photo.get("user"),"license":"Pixabay","source_url":photo.get("pageURL"),
+                "score":1.0,"role":"b-roll",
+            })
+            if len(result)>=limit:
+                break
+        except Exception as exc:
+            print(f"[pixabay] photo download failed id={photo_id}: {exc}")
+    return result
+
 def make_asset_plan(sentence:str,editorial:dict|None=None)->list[dict]:
     low=sentence.lower();roles=[]
     if editorial:
