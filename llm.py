@@ -12,7 +12,7 @@ MIN_NARRATION_WORDS = 1400
 SYSTEM = """You are the editorial brain for an automated premium documentary editor.
 Create an ORIGINAL factual long-form documentary plan. Do not copy any existing creator's script, wording, or finished video.
 
-The result must feel like a professionally researched cinematic YouTube documentary, not a ranking list, slideshow, AI summary, or sequence of generic text cards. Do not default to Top 5/Top 10 formats. Build a compelling story around a specific question, stakes, surprising details, and a satisfying answer. Use a vivid cold open in the first 2-3 sentences, then context, escalating curiosity, evidence and competing explanations, a meaningful reveal, consequences, and a memorable conclusion. Write conversational narration that sounds natural aloud. Never invent quotes, statistics, dates, or events. Give every beat concrete, searchable visual subjects (real places, people, objects, actions, archival material), specific footage keywords rather than vague mood words, and restrained overlays only for essential names, dates, figures, or short reveals. Prefer moving B-roll and evidence-led visuals; do not make every beat a title card.
+The result must feel like a professionally researched cinematic YouTube documentary, not a ranking list, slideshow, AI summary, or sequence of generic text cards. Do not default to Top 5/Top 10 formats. Build a compelling story around a specific question, stakes, surprising details, and a satisfying answer. Use a vivid cold open in the first 2-3 sentences, then context, escalating curiosity, evidence and competing explanations, a meaningful reveal, consequences, and a memorable conclusion. Write conversational narration that sounds natural aloud. Never invent quotes, statistics, dates, or events. Treat supplied research as evidence, not decoration: do not claim a source supports a point unless its title/snippet/abstract actually relates to that point. Prefer peer-reviewed research, government/university sources, primary documents, and reputable reporting over unsourced summaries. If the evidence is uncertain or sources disagree, say so in the narration. Never turn an unverified internet claim into a confident fact. Every beat must include a "source_urls" array containing URLs from the supplied research that directly support its factual claims; use an empty array rather than inventing a source. Give every beat concrete, searchable visual subjects (real places, people, objects, actions, archival material), specific footage keywords rather than vague mood words, and restrained overlays only for essential names, dates, figures, or short reveals. Prefer moving B-roll and evidence-led visuals; do not make every beat a title card.
 
 Target a finished documentary around 8-14 minutes. Aim for roughly 1,500-2,100 spoken words at a natural documentary pace. Do not pad the story just to hit a runtime.
 
@@ -72,7 +72,26 @@ def _normalize_plan(value, topic: str) -> dict:
         raise ValueError(f"LLM returned only {words} narration words; a long-form plan needs at least {MIN_NARRATION_WORDS}")
     return plan
 
-def _gemini(topic: str) -> dict:
+def _research_prompt(topic: str, research: list[dict] | None) -> str:
+    safe_sources = []
+    for item in (research or [])[:10]:
+        if not isinstance(item, dict) or not item.get("url"):
+            continue
+        safe_sources.append({
+            "title": str(item.get("title", ""))[:240],
+            "url": str(item.get("url", ""))[:500],
+            "source_type": str(item.get("source_type", "web_search")),
+            "content": str(item.get("content", ""))[:1000],
+        })
+    return (
+        f"{SYSTEM}\\n\\nBuild a complete long-form documentary plan about: {topic}\\n\\n"
+        "RESEARCH MATERIAL (use only relevant material; do not claim sources prove more than they say):\\n"
+        + json.dumps(safe_sources, ensure_ascii=False)
+        + "\\n\\nReturn source_urls on every beat, using only exact URLs listed above. "
+          "When this material is insufficient, keep the claim modest or omit it; never fabricate citations."
+    )
+
+def _gemini(topic: str, research: list[dict] | None = None) -> dict:
     from google import genai
     from google.genai import types
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
@@ -92,7 +111,7 @@ def _gemini(topic: str) -> dict:
                 print(f"[llm] Gemini plan attempt 1 failed; retrying: {exc}", flush=True)
     raise last_error
 
-def _openai(topic: str) -> dict:
+def _openai(topic: str, research: list[dict] | None = None) -> dict:
     from openai import OpenAI
     client = OpenAI()
     response = client.chat.completions.create(
@@ -100,35 +119,35 @@ def _openai(topic: str) -> dict:
         response_format={"type": "json_object"},
         messages=[
             {"role": "system", "content": SYSTEM},
-            {"role": "user", "content": f"Build a complete long-form documentary plan about: {topic}"},
+            {"role": "user", "content": _research_prompt(topic, research)},
         ],
         temperature=0.65,
     )
     return _normalize_plan(_parse_json(response.choices[0].message.content), topic)
 
-def _anthropic(topic: str) -> dict:
+def _anthropic(topic: str, research: list[dict] | None = None) -> dict:
     from anthropic import Anthropic
     client = Anthropic()
     response = client.messages.create(
         model=os.getenv("ANTHROPIC_MODEL") or "claude-3-5-sonnet-latest",
         max_tokens=9000,
         system=SYSTEM,
-        messages=[{"role": "user", "content": f"Build a complete long-form documentary plan about: {topic}"}],
+        messages=[{"role": "user", "content": _research_prompt(topic, research)}],
     )
     return _normalize_plan(_parse_json(response.content[0].text), topic)
 
-def generate(topic: str) -> dict:
+def generate(topic: str, research: list[dict] | None = None) -> dict:
     provider = os.getenv("LLM_PROVIDER", "auto").lower()
     order = {"gemini": ["gemini"], "openai": ["openai"], "anthropic": ["anthropic"], "auto": ["gemini", "openai", "anthropic"]}.get(provider, ["gemini", "openai", "anthropic"])
     attempted = []
     for name in order:
         try:
             if name == "gemini" and os.getenv("GEMINI_API_KEY"):
-                return _gemini(topic)
+                return _gemini(topic, research)
             if name == "openai" and os.getenv("OPENAI_API_KEY"):
-                return _openai(topic)
+                return _openai(topic, research)
             if name == "anthropic" and os.getenv("ANTHROPIC_API_KEY"):
-                return _anthropic(topic)
+                return _anthropic(topic, research)
         except Exception as exc:
             attempted.append(f"{name}: {exc}")
             print(f"[llm] {name} failed: {exc}", flush=True)
