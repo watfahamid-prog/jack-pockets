@@ -263,7 +263,7 @@ def _safe(s:str)->str:
     return html.escape(re.sub(r"\s+"," ",str(s)).strip())
 
 def _svg(kind:str,title:str,body:str,accent:str="#f5d76e")->str:
-    title=_safe(title)[:70];body=_safe(body)[:210]
+    title=_safe(title)[:36];body=_safe(body)[:210]
     return f'''<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
 <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#161616"/><stop offset="1" stop-color="#050505"/></linearGradient><filter id="s"><feDropShadow dx="0" dy="16" stdDeviation="20" flood-opacity=".55"/></filter></defs>
 <rect width="1920" height="1080" fill="url(#g)"/><rect x="70" y="70" width="1780" height="940" rx="28" fill="#111" stroke="#444" stroke-width="2" filter="url(#s)"/>
@@ -299,14 +299,14 @@ def generate_role_asset(role:str,narration:str,out:Path,research:list[dict]|None
             bar_parts.append(f'<rect x="{260+i*250}" y="{y}" width="110" height="{height}" rx="12" fill="#f5d76e"/>')
         bars="".join(bar_parts)
         fallback='<rect x="300" y="500" width="900" height="180" rx="20" fill="#f5d76e" opacity=".8"/>'
-        svg=f'<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080"><rect width="1920" height="1080" fill="#090909"/><text x="150" y="150" fill="#fff" font-family="Arial" font-size="40" font-weight="800">DATA / SCALE</text><text x="150" y="235" fill="#fff" font-family="Arial" font-size="62" font-weight="900">{_safe(narration[:55])}</text><line x1="220" y1="820" x2="1700" y2="820" stroke="#555" stroke-width="3"/>{bars or fallback}</svg>'
+        svg=f'<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080"><rect width="1920" height="1080" fill="#090909"/><text x="150" y="150" fill="#fff" font-family="Arial" font-size="40" font-weight="800">DATA / SCALE</text><text x="150" y="235" fill="#fff" font-family="Arial" font-size="62" font-weight="900">{_safe(narration[:38])}</text><line x1="220" y1="820" x2="1700" y2="820" stroke="#555" stroke-width="3"/>{bars or fallback}</svg>'
     elif role=="map":
-        svg=f'<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080"><rect width="1920" height="1080" fill="#0a0a0a"/><path d="M220 700 L400 430 L690 300 L980 390 L1210 270 L1510 470 L1680 730 L1450 870 L1040 820 L710 900 L390 820 Z" fill="#171717" stroke="#777" stroke-width="5"/><circle cx="980" cy="520" r="24" fill="#f5d76e"/><circle cx="980" cy="520" r="55" fill="none" stroke="#f5d76e" stroke-opacity=".35" stroke-width="5"/><text x="150" y="160" fill="#fff" font-family="Arial" font-size="40" font-weight="800">LOCATION</text><text x="150" y="235" fill="#fff" font-family="Arial" font-size="62" font-weight="900">{_safe(narration[:65])}</text></svg>'
+        svg=f'<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080"><rect width="1920" height="1080" fill="#0a0a0a"/><path d="M220 700 L400 430 L690 300 L980 390 L1210 270 L1510 470 L1680 730 L1450 870 L1040 820 L710 900 L390 820 Z" fill="#171717" stroke="#777" stroke-width="5"/><circle cx="980" cy="520" r="24" fill="#f5d76e"/><circle cx="980" cy="520" r="55" fill="none" stroke="#f5d76e" stroke-opacity=".35" stroke-width="5"/><text x="150" y="160" fill="#fff" font-family="Arial" font-size="40" font-weight="800">LOCATION</text><text x="150" y="235" fill="#fff" font-family="Arial" font-size="62" font-weight="900">{_safe(narration[:38])}</text></svg>'
     else:
         # Always provide a real visual fallback when stock footage is unavailable.
         # This prevents a valid render from becoming a completely black video.
         label = role.upper().replace("-", " ")
-        title = _safe(narration[:78])
+        title = _safe(narration[:38])
         body = _safe("Editorial visual generated from the narration. Stock footage can replace this asset when Pexels is configured.")
         svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
 <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#151515"/><stop offset="1" stop-color="#050505"/></linearGradient><radialGradient id="glow"><stop stop-color="#f5d76e" stop-opacity=".22"/><stop offset="1" stop-color="#f5d76e" stop-opacity="0"/></radialGradient></defs>
