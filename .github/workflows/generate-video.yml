@@ -74,7 +74,7 @@ jobs:
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
           MUSIC_URL: ${{ secrets.MUSIC_URL }}
-        run: python generate.py --topic "${{ inputs.topic }}" --assets-per-beat 1
+        run: python generate.py --topic "${{ inputs.topic }}" --assets-per-beat 2
 
       - name: Upload documentary and diagnostics
         if: always()
