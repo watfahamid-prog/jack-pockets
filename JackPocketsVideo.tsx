@@ -61,8 +61,22 @@ const ShotView: React.FC<{ beat: Beat; shot: Shot; frame: number; fps: number }>
   </AbsoluteFill>;
 };
 
-const captionAt = (words: Array<{ word: string; start: number; end: number }>, time: number) =>
-  words.find(word => time >= word.start && time < word.end)?.word || "";
+const captionAt = (words: Array<{ word: string; start: number; end: number }>, time: number) => {
+  const index = words.findIndex(word => time >= word.start && time < word.end);
+  if (index < 0) return "";
+  const endsSentence = (word: string) => /[.!?]["')\]]?$/.test(word.trim());
+  let start = index;
+  while (start > 0 && index - start < 6 && !endsSentence(words[start - 1].word)) start--;
+  let end = Math.min(words.length, start + 7);
+  for (let i = start; i < end; i++) {
+    if (i >= index && endsSentence(words[i].word)) { end = i + 1; break; }
+  }
+  if (index >= end) {
+    start = Math.max(0, index - 3);
+    end = Math.min(words.length, start + 7);
+  }
+  return words.slice(start, end).map(item => item.word.trim()).filter(Boolean).join(" ");
+};
 
 export const JackPocketsVideo: React.FC<{ manifest: VideoManifest }> = ({ manifest }) => {
   const frame = useCurrentFrame();
