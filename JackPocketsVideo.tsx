@@ -1,5 +1,5 @@
 import React from "react";
-import { AbsoluteFill, Audio, Img, OffthreadVideo, interpolate, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Audio, Img, OffthreadVideo, Sequence, interpolate, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import type { VideoManifest, Beat, Shot, Layer } from "./types";
 
 const src = (value: string) => value.startsWith("http") ? value : staticFile(value);
@@ -97,7 +97,15 @@ export const JackPocketsVideo: React.FC<{ manifest: VideoManifest }> = ({ manife
       </div>
     </AbsoluteFill>
     {manifest.audioSrc && <Audio src={staticFile(manifest.audioSrc)} />}
-    {manifest.musicSrc && <Audio src={staticFile(manifest.musicSrc)} volume={0.12} />}
-    {activeBeat && activeShot && activeShot.sfx?.map((cue, index) => cue.src ? <Audio key={`sfx-${activeShot.id}-${index}`} src={staticFile(cue.src)} startFrom={0} volume={cue.gain} /> : null)}
+    {manifest.musicSrc && <Audio src={staticFile(manifest.musicSrc)} volume={0.075} />}
+    {activeBeat && activeShot && activeShot.sfx?.map((cue, index) => {
+      const shotDuration = Math.max(0, activeShot.end - activeShot.start);
+      const cueFrame = Math.max(0, Math.round((activeBeat.start + activeShot.start + (cue.at || 0) * shotDuration) * fps));
+      return cue.src ? (
+        <Sequence key={`sfx-${activeShot.id}-${index}`} from={cueFrame} durationInFrames={Math.max(1, Math.ceil(fps * 0.8))}>
+          <Audio src={staticFile(cue.src)} startFrom={0} volume={cue.gain} />
+        </Sequence>
+      ) : null;
+    })}
   </AbsoluteFill>;
 };
