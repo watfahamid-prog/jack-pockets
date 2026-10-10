@@ -75,48 +75,81 @@ def _europe_pmc(query: str, limit: int) -> list[dict]:
 
 
 def _wikipedia(query: str, limit: int) -> list[dict]:
-    # Broad fallback if Tavily is not configured; label it as background, not primary evidence.
+    """Use Wikipedia as a free, keyless starting point; never treat it as final proof."""
     try:
         response = requests.get(
             "https://en.wikipedia.org/w/api.php",
-            params={"action": "query", "list": "search", "srsearch": query, "format": "json", "srlimit": min(limit, 5)},
+            params={
+                "action": "query",
+                "generator": "search",
+                "gsrsearch": query,
+                "gsrnamespace": 0,
+                "gsrlimit": min(limit, 5),
+                "prop": "extracts|info",
+                "exintro": 1,
+                "explaintext": 1,
+                "inprop": "url",
+                "format": "json",
+            },
             headers=HEADERS,
             timeout=20,
         )
         response.raise_for_status()
-        hits = response.json().get("query", {}).get("search", [])
+        pages = response.json().get("query", {}).get("pages", {})
     except Exception as exc:
-        print(f"[research] Wikipedia fallback unavailable: {exc}", flush=True)
+        print(f"[research] Wikipedia API unavailable: {exc}", flush=True)
         return []
+
+    # The MediaWiki API returns pages keyed by page ID; sort by search rank.
+    ranked = sorted(pages.values(), key=lambda page: page.get("index", 10_000))
     results = []
-    for hit in hits:
-        title = hit.get("title", "")
-        if not title:
+    for page in ranked:
+        title = page.get("title", "")
+        url = page.get("fullurl")
+        extract = re.sub(r"\\s+", " ", str(page.get("extract") or "")).strip()
+        if not title or not url:
             continue
-        extract = re.sub(r"<[^>]+>", " ", hit.get("snippet", ""))
         results.append({
             "title": title,
-            "url": "https://en.wikipedia.org/wiki/" + requests.utils.quote(title.replace(" ", "_"), safe="()'"),
-            "content": extract,
+            "url": url,
+            "content": extract[:2200],
             "source_type": "encyclopedia_background",
+            "verification_note": (
+                "Wikipedia is a starting point only. Verify factual claims against "
+                "the article's cited references and preferably primary, academic, "
+                "government, or university sources before using them in narration."
+            ),
         })
     return results
 
-
 def search_web(query: str, limit: int = 6) -> list[dict]:
-    """Find traceable sources; prefer web search and biomedical literature, never invent citations."""
+    """Collect multiple source types; Wikipedia supplies context, not final verification."""
     limit = max(1, min(int(limit), 10))
     results = []
+
     try:
-        results.extend(_tavily(query, limit))
+        results.extend(_tavily(query, max(2, limit - 2)))
     except Exception as exc:
         print(f"[research] Tavily search failed: {exc}", flush=True)
 
-    # Add peer-reviewed biomedical sources for scientific topics, even when general search works.
-    if len(results) < min(limit, 4):
-        results.extend(_europe_pmc(query, limit))
-    if len(results) < min(limit, 4):
-        results.extend(_wikipedia(query, limit))
+    # Add a small Wikipedia context set on every topic. The API is public and requires no key.
+    # Keep it after search results so it cannot displace stronger sources.
+    try:
+        results.extend(_wikipedia(query, min(2, limit)))
+    except Exception as exc:
+        print(f"[research] Wikipedia search skipped: {exc}", flush=True)
+
+    # Biomedical literature is useful for health, anatomy, biology, and medical topics.
+    science_terms = (
+        "biology", "biolog", "human", "pig", "animal", "body", "organ", "heart",
+        "brain", "medical", "medicine", "health", "disease", "science", "anatom",
+        "physiology", "evolution", "genetic", "species", "research", "study",
+    )
+    if any(term in query.lower() for term in science_terms) or len(results) < min(limit, 4):
+        try:
+            results.extend(_europe_pmc(query, min(4, limit)))
+        except Exception as exc:
+            print(f"[research] Europe PMC search skipped: {exc}", flush=True)
 
     unique = []
     seen = set()
