@@ -7,7 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from assets import generate_role_asset, make_asset_plan, search_pexels, search_pexels_videos
+from assets import generate_role_asset, make_asset_plan, search_pexels, search_pexels_videos, search_pixabay, search_pixabay_videos
 from llm import generate
 from manifest import build
 from music import get_music
@@ -93,11 +93,24 @@ def main() -> None:
                 videos = []
 
             candidates = videos
+            # Prefer real moving footage from either free stock provider before photos.
+            if not candidates:
+                try:
+                    candidates = search_pixabay_videos(query, root / f"assets-{index}", limit=4)
+                except Exception as exc:
+                    print(f"[assets] Pixabay video fallback failed for beat {index + 1}: {exc}", flush=True)
+                    candidates = []
             if not candidates:
                 try:
                     candidates = search_pexels(query, root / f"assets-{index}", limit=3)
                 except Exception as exc:
-                    print(f"[assets] photo fallback failed for beat {index + 1}: {exc}", flush=True)
+                    print(f"[assets] Pexels photo fallback failed for beat {index + 1}: {exc}", flush=True)
+                    candidates = []
+            if not candidates:
+                try:
+                    candidates = search_pixabay(query, root / f"assets-{index}", limit=3)
+                except Exception as exc:
+                    print(f"[assets] Pixabay photo fallback failed for beat {index + 1}: {exc}", flush=True)
                     candidates = []
 
             for item in candidates:
