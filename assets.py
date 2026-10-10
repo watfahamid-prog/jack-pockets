@@ -57,7 +57,7 @@ def search_pexels_videos(query:str,out:Path,limit:int=4)->list[dict]:
         try:
             if not path.exists(): _download(chosen["link"],path)
             print(f"[pexels] selected video={vid} {chosen.get('width')}x{chosen.get('height')} duration={video.get('duration')}s bytes={path.stat().st_size}")
-            result.append({"id":f"pexels-video-{vid}","kind":"video","src":str(path),"credit":(video.get("user") or {}).get("name"),"license":"Pexels","score":1.0,"role":"b-roll","duration":float(video.get("duration") or 0),"width":chosen.get("width"),"height":chosen.get("height"),"fps":chosen.get("fps")})
+            result.append({"id":f"pexels-video-{vid}","kind":"video","src":str(path),"credit":(video.get("user") or {}).get("name"),"license":"Pexels","license_url":"https://www.pexels.com/license/","source_url":video.get("url"),"creator_url":(video.get("user") or {}).get("url"),"score":1.0,"role":"b-roll","duration":float(video.get("duration") or 0),"width":chosen.get("width"),"height":chosen.get("height"),"fps":chosen.get("fps")})
             if len(result)>=limit: break
         except Exception as e:
             print(f"[pexels] download failed video={vid}: {e}")
@@ -81,7 +81,7 @@ def search_pexels(query:str,out:Path,limit:int=3)->list[dict]:
         path=out/f"photo-{p['id']}.jpg"
         try:
             _download(src,path)
-            result.append({"id":str(p["id"]),"kind":"photo","src":str(path),"credit":p.get("photographer"),"license":"Pexels","score":1.0,"role":"b-roll"})
+            result.append({"id":str(p["id"]),"kind":"photo","src":str(path),"credit":p.get("photographer"),"license":"Pexels","license_url":"https://www.pexels.com/license/","source_url":p.get("url"),"creator_url":p.get("photographer_url"),"score":1.0,"role":"b-roll"})
         except Exception as e:
             print(f"[pexels] photo download failed id={p.get('id')}: {e}")
     return result
