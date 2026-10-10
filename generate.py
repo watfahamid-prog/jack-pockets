@@ -41,10 +41,22 @@ def main() -> None:
     root.mkdir(parents=True, exist_ok=True)
 
     print(f"[pipeline] generating documentary: {args.topic}", flush=True)
-    plan = generate(args.topic)
+    # Research the subject before drafting, so the script is evidence-led rather than
+    # generated first and decorated with search results afterwards.
+    try:
+        topic_research = search_web(
+            f"{args.topic} primary sources scientific studies official records reliable evidence",
+            limit=8,
+        )
+    except Exception as exc:
+        print(f"[research] topic-level search unavailable: {exc}", flush=True)
+        topic_research = []
+    print(f"[research] topic-level sources found={len(topic_research)}", flush=True)
+    plan = generate(args.topic, topic_research)
     plan["topic"] = args.topic
+    plan["topicResearch"] = topic_research
 
-    research = []
+    research = list(topic_research)
     for index, beat in enumerate(plan.get("beats", []), start=1):
         query = f"{args.topic}: {beat.get('title', '')} {str(beat.get('narration', ''))[:350]}"
         try:
@@ -55,7 +67,10 @@ def main() -> None:
         beat["research"] = found
         research.extend(found)
 
-    plan["sources"] = list(dict.fromkeys(x["url"] for x in research if x.get("url")))
+    # Include both research gathered before writing and beat-specific follow-up sources.
+    plan["sources"] = list(dict.fromkeys(
+        str(x["url"]) for x in research if isinstance(x, dict) and x.get("url")
+    ))
     (root / "research.json").write_text(json.dumps(research, indent=2), encoding="utf-8")
     (root / "plan.json").write_text(json.dumps(plan, indent=2), encoding="utf-8")
 
