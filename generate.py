@@ -13,6 +13,7 @@ from manifest import build
 from music import get_music
 from quality import validate
 from research import search_web
+from sfx import create_sound_effects
 from tts import synthesize
 
 PROFILES = {"youtube": {"width": 1920, "height": 1080, "fps": 60}}
@@ -185,6 +186,32 @@ def main() -> None:
     manifest_path = root / "manifest.json"
     build(plan, public_path(audio), words, asset_sets, PROFILES[args.profile], manifest_path)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    # Add restrained, original sound accents only to motivated reveals/consequences.
+    # These are generated locally, so no SFX API key or external licence is required.
+    sound_effects = create_sound_effects(root / "sfx")
+    for beat in manifest.get("beats", []):
+        candidates = [
+            shot for shot in beat.get("shots", [])
+            if shot.get("reason") == "reveal" or shot.get("intent") == "consequence"
+        ]
+        if not candidates:
+            continue
+        shot = candidates[-1]
+        effect_name = "hit" if shot.get("reason") == "reveal" else "whoosh"
+        effect_path = sound_effects[effect_name]
+        shot["sfx"] = [{
+            "src": public_path(effect_path),
+            "at": 0.72 if effect_name == "hit" else 0.12,
+            "gain": 0.20 if effect_name == "hit" else 0.12,
+            "label": "original procedural " + effect_name,
+        }]
+    manifest["soundDesign"] = {
+        "provider": "Generated locally with FFmpeg",
+        "effects": "Subtle transition/reveal accents on selected editorial beats",
+        "external_assets": False,
+    }
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
     music_path = get_music("cinematic documentary ambient", root / "music-bed.m4a", manifest["duration"])
     if music_path:
