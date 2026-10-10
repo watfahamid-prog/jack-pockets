@@ -7,7 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from assets import generate_role_asset, make_asset_plan, search_pexels, search_pexels_videos, search_pixabay, search_pixabay_videos
+from assets import generate_role_asset, make_asset_plan, search_pexels, search_pexels_videos, search_pixabay, search_pixabay_videos, search_commons_videos, search_commons_photos
 from llm import generate
 from manifest import build
 from music import get_music
@@ -78,9 +78,10 @@ def main() -> None:
         beat_keywords = [str(x) for x in beat.get("keywords", []) if str(x).strip()]
         narration_text = str(beat.get("narration", "")).strip()
         first_sentence = re.split(r"(?<=[.!?])\s+", narration_text)[0][:180]
+        # Search using concise visual subjects rather than long narration sentences.
         queries = list(dict.fromkeys([
-            " ".join([title, *beat_keywords[:4], "documentary footage"]).strip(),
-            " ".join([title, first_sentence]).strip(),
+            beat_keywords[0] if beat_keywords else f"{title} archival footage",
+            beat_keywords[1] if len(beat_keywords) > 1 else title,
         ]))
         stock_assets = []
         generated_assets = []
@@ -102,6 +103,12 @@ def main() -> None:
                     candidates = []
             if not candidates:
                 try:
+                    candidates = search_commons_videos(query, root / f"assets-{index}", limit=3)
+                except Exception as exc:
+                    print(f"[assets] Wikimedia video fallback failed for beat {index + 1}: {exc}", flush=True)
+                    candidates = []
+            if not candidates:
+                try:
                     candidates = search_pexels(query, root / f"assets-{index}", limit=3)
                 except Exception as exc:
                     print(f"[assets] Pexels photo fallback failed for beat {index + 1}: {exc}", flush=True)
@@ -111,6 +118,12 @@ def main() -> None:
                     candidates = search_pixabay(query, root / f"assets-{index}", limit=3)
                 except Exception as exc:
                     print(f"[assets] Pixabay photo fallback failed for beat {index + 1}: {exc}", flush=True)
+                    candidates = []
+            if not candidates:
+                try:
+                    candidates = search_commons_photos(query, root / f"assets-{index}", limit=3)
+                except Exception as exc:
+                    print(f"[assets] Wikimedia photo fallback failed for beat {index + 1}: {exc}", flush=True)
                     candidates = []
 
             for item in candidates:
