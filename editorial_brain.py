@@ -58,16 +58,17 @@ def _asset_score(asset: dict, sentence_terms: set[str], role: str) -> float:
     score = overlap * 2.0
     kind = str(asset.get("kind", "")).lower()
     asset_role = str(asset.get("role", "")).lower()
+    # Prefer real footage/photos over synthetic template cards; graphics are supporting evidence only.
     if kind == "video":
-        score += 5.0
+        score += 16.0
     elif kind == "photo":
-        score += 2.0
-    elif kind in {"generated", "document"}:
-        score += 0.5
-    if role in {"map", "document", "screenshot", "chart"} and asset_role == role:
         score += 6.0
+    elif kind in {"generated", "document"}:
+        score -= 4.0
+    if role in {"map", "document", "screenshot", "chart"} and asset_role == role:
+        score += 1.0
     if role in {"map", "document", "screenshot", "chart"} and kind == "generated" and role in str(asset.get("id", "")).lower():
-        score += 4.0
+        score += 0.5
     return score
 
 
