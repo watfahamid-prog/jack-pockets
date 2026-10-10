@@ -28,7 +28,8 @@ The workflow is in `.github/workflows/generate-video.yml`. Open **Actions → Ge
 Required: at least one LLM provider key (`GEMINI_API_KEY`, `OPENAI_API_KEY`, or `ANTHROPIC_API_KEY`).
 
 Recommended for real footage:
-- `PEXELS_API_KEY` — searches for licensed stock video and photos.
+- `PEXELS_API_KEY` — searches Pexels for licensed stock video and photos.
+- `PIXABAY_API_KEY` — optional free API fallback for additional stock video and photos when Pexels has no suitable results. Both keys are free to obtain; API quotas and each site's licence still apply.
 
 Optional:
 - `ELEVENLABS_API_KEY` and `ELEVENLABS_VOICE_ID` — both must be set to use ElevenLabs narration. If either is missing, the pipeline uses Edge TTS.
