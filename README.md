@@ -44,6 +44,8 @@ Optional:
 - Scene selection scores assets against sentence keywords and avoids cycling through a fixed asset order.
 - Footage source order includes Pexels, Pixabay, Wikimedia Commons and Internet Archive; the pipeline records per-asset credits/licence metadata where supplied by the provider.
 - Music provenance is written to `musicSource` in the run manifest, and external source URLs are added to the manifest's `sources` list when available.
+- Footage search now starts with scene-title/keyword phrases and checks additional providers when the first provider returns too few moving clips; this improves variety but cannot guarantee every result is semantically correct.
+- The pipeline generates subtle original transition/reveal SFX with FFmpeg and schedules them at selected editorial cue times. These are deliberately restrained accents, not a substitute for human sound review. Background music is mixed lower under narration.
 - Research now runs before the script is drafted. The LLM receives source titles, URLs, and excerpts and is instructed to attach source URLs to factual beats and avoid unsupported claims. Follow-up searches are saved in `research.json`; this is evidence assistance, not a guarantee that every claim is automatically fact-checked, so review sources before publishing.
 - Research sources and media sources are different: academic papers, government/university pages, and primary records support factual narration; Pexels/Pixabay/Wikimedia/Internet Archive supply potential visuals. The system cannot infer a creator's exact original clip or soundtrack provider unless the source can be matched.
 - Generic keyword stickers, duplicated narration blocks, and gratuitous glitch/shake effects are intentionally limited.
