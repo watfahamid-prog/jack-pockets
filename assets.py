@@ -32,6 +32,9 @@ def _download(url,path):
                 if chunk:f.write(chunk)
 
 def search_pexels_videos(query:str,out:Path,limit:int=4)->list[dict]:
+    if _PEXELS_DISABLED:
+        print("[pexels] skipping after earlier authentication/authorization failure", flush=True)
+        return []
     key=_pexels_key()
     if not key:
         print("[pexels] no API key; skipping video search")
@@ -59,6 +62,9 @@ def search_pexels_videos(query:str,out:Path,limit:int=4)->list[dict]:
     return result
 
 def search_pexels(query:str,out:Path,limit:int=3)->list[dict]:
+    if _PEXELS_DISABLED:
+        print("[pexels] skipping photo search after earlier authentication/authorization failure", flush=True)
+        return []
     key=_pexels_key()
     if not key:
         print("[pexels] no API key; skipping photo search")
