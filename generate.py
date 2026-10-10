@@ -7,7 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from assets import generate_role_asset, make_asset_plan, search_pexels, search_pexels_videos, search_pixabay, search_pixabay_videos, search_commons_videos, search_commons_photos
+from assets import generate_role_asset, make_asset_plan, search_pexels, search_pexels_videos, search_pixabay, search_pixabay_videos, search_commons_videos, search_commons_photos, search_archive_videos
 from llm import generate
 from manifest import build
 from music import get_music
@@ -106,6 +106,13 @@ def main() -> None:
                     candidates = search_commons_videos(query, root / f"assets-{index}", limit=3)
                 except Exception as exc:
                     print(f"[assets] Wikimedia video fallback failed for beat {index + 1}: {exc}", flush=True)
+                    candidates = []
+            # Free, keyless fallback for openly licensed real footage.
+            if not candidates:
+                try:
+                    candidates = search_archive_videos(query, root / f"assets-{index}", limit=3)
+                except Exception as exc:
+                    print(f"[assets] Internet Archive video fallback failed for beat {index + 1}: {exc}", flush=True)
                     candidates = []
             if not candidates:
                 try:
