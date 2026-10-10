@@ -96,7 +96,7 @@ def _gemini(topic: str, research: list[dict] | None = None) -> dict:
     from google.genai import types
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
     model = os.getenv("GEMINI_MODEL") or "gemini-3.8-flash"
-    prompt = f"{SYSTEM}\n\nBuild a complete long-form documentary plan about: {topic}"
+    prompt = _research_prompt(topic, research)
     last_error = None
     for attempt in range(2):
         try:
