@@ -57,7 +57,7 @@ def search_pexels_videos(query:str,out:Path,limit:int=4)->list[dict]:
         try:
             if not path.exists(): _download(chosen["link"],path)
             print(f"[pexels] selected video={vid} {chosen.get('width')}x{chosen.get('height')} duration={video.get('duration')}s bytes={path.stat().st_size}")
-            result.append({"id":f"pexels-video-{vid}","kind":"video","src":str(path),"credit":(video.get("user") or {}).get("name"),"license":"Pexels","license_url":"https://www.pexels.com/license/","source_url":video.get("url"),"creator_url":(video.get("user") or {}).get("url"),"score":1.0,"role":"b-roll","duration":float(video.get("duration") or 0),"width":chosen.get("width"),"height":chosen.get("height"),"fps":chosen.get("fps")})
+            result.append({"id":f"pexels-video-{vid}","kind":"video","src":str(path),"title":str(video.get("url") or "").rstrip("/").rsplit("/",1)[-1].replace("-"," "),"description":str(video.get("url") or ""),"credit":(video.get("user") or {}).get("name"),"license":"Pexels","license_url":"https://www.pexels.com/license/","source_url":video.get("url"),"creator_url":(video.get("user") or {}).get("url"),"score":1.0,"role":"b-roll","duration":float(video.get("duration") or 0),"width":chosen.get("width"),"height":chosen.get("height"),"fps":chosen.get("fps")})
             if len(result)>=limit: break
         except Exception as e:
             print(f"[pexels] download failed video={vid}: {e}")
@@ -81,7 +81,7 @@ def search_pexels(query:str,out:Path,limit:int=3)->list[dict]:
         path=out/f"photo-{p['id']}.jpg"
         try:
             _download(src,path)
-            result.append({"id":str(p["id"]),"kind":"photo","src":str(path),"credit":p.get("photographer"),"license":"Pexels","license_url":"https://www.pexels.com/license/","source_url":p.get("url"),"creator_url":p.get("photographer_url"),"score":1.0,"role":"b-roll"})
+            result.append({"id":str(p["id"]),"kind":"photo","src":str(path),"title":str(p.get("url") or "").rstrip("/").rsplit("/",1)[-1].replace("-"," "),"description":str(p.get("alt") or ""),"credit":p.get("photographer"),"license":"Pexels","license_url":"https://www.pexels.com/license/","source_url":p.get("url"),"creator_url":p.get("photographer_url"),"score":1.0,"role":"b-roll"})
         except Exception as e:
             print(f"[pexels] photo download failed id={p.get('id')}: {e}")
     return result
@@ -129,7 +129,7 @@ def search_pixabay_videos(query:str,out:Path,limit:int=4)->list[dict]:
                 _download(chosen["url"],path)
             result.append({
                 "id":f"pixabay-video-{vid}","kind":"video","src":str(path),
-                "credit":video.get("user"),"license":"Pixabay","source_url":video.get("pageURL"),
+                "credit":video.get("user"),"title":str(video.get("tags") or ""),"tags":str(video.get("tags") or "").split(", "),"description":str(video.get("tags") or ""),"license":"Pixabay","source_url":video.get("pageURL"),
                 "score":1.0,"role":"b-roll","duration":float(video.get("duration") or 0),
                 "width":chosen.get("width"),"height":chosen.get("height"),
             })
@@ -169,7 +169,7 @@ def search_pixabay(query:str,out:Path,limit:int=3)->list[dict]:
                 _download(src,path)
             result.append({
                 "id":f"pixabay-photo-{photo_id}","kind":"photo","src":str(path),
-                "credit":photo.get("user"),"license":"Pixabay","source_url":photo.get("pageURL"),
+                "credit":photo.get("user"),"title":str(photo.get("tags") or ""),"tags":str(photo.get("tags") or "").split(", "),"description":str(photo.get("tags") or ""),"license":"Pixabay","source_url":photo.get("pageURL"),
                 "score":1.0,"role":"b-roll",
             })
             if len(result)>=limit:
@@ -252,6 +252,7 @@ def search_archive_videos(query:str,out:Path,limit:int=3)->list[dict]:
                 result.append({
                     "id": f"archive-video-{identifier}", "kind": "video", "src": str(path),
                     "credit": "Internet Archive: " + str(doc.get("title") or identifier),
+                    "title": str(doc.get("title") or identifier), "description": str(doc.get("description") or ""),
                     "license": "Internet Archive / " + license_url,
                     "source_url": f"https://archive.org/details/{identifier}",
                     "score": 0.85, "role": "b-roll", "query": query,
@@ -321,7 +322,7 @@ def _commons_search(query:str,out:Path,limit:int=3,kind:str="video")->list[dict]
             artist = re.sub(r"<[^>]+>", " ", str(artist_value)).strip()[:180]
             license_value = metadata.get("LicenseShortName", {}).get("value", "Wikimedia Commons") if isinstance(metadata.get("LicenseShortName"), dict) else "Wikimedia Commons"
             result.append({
-                "id": asset_id, "kind": kind, "src": str(path), "credit": artist or "Wikimedia Commons contributor",
+                "id": asset_id, "kind": kind, "src": str(path), "title": str(page.get("title") or "").replace("File:","").replace("_"," "), "description": str(metadata.get("ImageDescription", {}).get("value", "") if isinstance(metadata.get("ImageDescription"), dict) else ""), "credit": artist or "Wikimedia Commons contributor",
                 "license": f"Wikimedia Commons / {license_value}", "source_url": "https://commons.wikimedia.org/wiki/" + str(page.get("title", "")).replace(" ", "_"),
                 "score": 1.0, "role": "b-roll", "query": clean,
             })
