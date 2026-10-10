@@ -174,9 +174,23 @@ def main() -> None:
     music_path = get_music("cinematic documentary ambient", root / "music-bed.m4a", manifest["duration"])
     if music_path:
         manifest["musicSrc"] = public_path(Path(music_path))
-        print(f"[music] soundtrack prepared: {manifest['musicSrc']}", flush=True)
+        music_metadata_path = Path(music_path).with_suffix(".json")
+        if music_metadata_path.exists():
+            music_metadata = json.loads(music_metadata_path.read_text(encoding="utf-8"))
+            manifest["musicSource"] = music_metadata
+            source_url = music_metadata.get("source_url")
+            if source_url:
+                manifest["sources"] = list(dict.fromkeys([*(manifest.get("sources") or []), source_url]))
+            print(
+                f"[music] soundtrack prepared: {manifest['musicSrc']} "
+                f"| provider={music_metadata.get('provider', 'unknown')} "
+                f"| license={music_metadata.get('license', 'not stated')}",
+                flush=True,
+            )
+        else:
+            print(f"[music] soundtrack prepared: {manifest['musicSrc']}", flush=True)
     else:
-        print("[music] no MUSIC_URL configured; rendering narration without a music bed", flush=True)
+        print("[music] no soundtrack available; rendering narration only", flush=True)
 
     errors = validate(str(manifest_path))
     if errors:
