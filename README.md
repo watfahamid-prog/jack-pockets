@@ -51,6 +51,14 @@ Optional:
 - Generic keyword stickers, duplicated narration blocks, and gratuitous glitch/shake effects are intentionally limited.
 - The quality gate checks structure, timing, captions, and audio source; final FFprobe checks verify a 1080p60 MP4 with an audio stream.
 
+## Public reference-channel audit (10 October 2026)
+
+A review of the public [Jack Pockets channel](https://www.youtube.com/@jackpockets), its [video catalogue](https://www.youtube.com/@jackpockets/videos), [What's The Most Expensive Thing Ever?](https://www.youtube.com/watch?v=jXwOcpkMQAA), and [What's The Most Evil Company?](https://www.youtube.com/watch?v=w_B05yg7sDw) found no public credits that verify the channel's original footage library, music library, sound-effects source, narrator, editor, or editing software.
+
+The description of *What's The Most Evil Company?* names Moon, Jake Tran, MagnatesMedia, fern, Company Man, Ordinary Things, Oversimplified, Casually Explained, and Sam O'Nella as inspirations. That is not evidence that those channels supplied assets or worked on the video. YouTube's auto-dubbing notice refers to alternate-language audio tracks and does not identify the original narrator or voice tool. A third-party [channel analysis](https://outlierkit.com/channel/jackpockets) infers a stock-footage/motion-graphics workflow, but this is not creator-confirmed sourcing.
+
+**Implementation decision:** do not label Pexels, Pixabay, Wikimedia Commons, Internet Archive, Edge TTS, or ElevenLabs as Jack Pockets' actual suppliers. They are our pipeline's available options. The generator should preserve each downloaded asset's original page URL, creator URL when available, and licence URL so every generated video's real provenance can be audited. Pexels video/photo records now include those fields when the API provides them; other providers already expose source URLs where available. Exact visual matching to reference shots remains unverified.
+
 Stock search can still return weak matches, and high-quality footage depends on the available provider results and API quota. Always review the rendered artifact before publishing.
 
 
