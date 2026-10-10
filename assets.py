@@ -186,7 +186,7 @@ def search_archive_videos(query:str,out:Path,limit:int=3)->list[dict]:
     if not terms:
         return []
     # Search multiple levels of specificity so a long editorial query doesn't return zero hits.
-    variants = [terms[:6], terms[:4], terms[:2]]
+    variants = [terms[:4], terms[:2]]
     seen = set()
     result = []
     headers = {"User-Agent": "JackPocketsDocumentary/1.0 (open-media search; https://github.com/watfahamid-prog/jack-pockets)"}
@@ -199,8 +199,8 @@ def search_archive_videos(query:str,out:Path,limit:int=3)->list[dict]:
                 "https://archive.org/advancedsearch.php",
                 params={"q": f"mediatype:movies AND ({expression})",
                         "fl[]": ["identifier", "title", "description", "licenseurl"],
-                        "rows": 12, "page": 1, "output": "json"},
-                headers=headers, timeout=35)
+                        "rows": 8, "page": 1, "output": "json"},
+                headers=headers, timeout=20)
             response.raise_for_status()
             docs = response.json().get("response", {}).get("docs", [])
         except Exception as exc:
