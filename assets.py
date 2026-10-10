@@ -1,7 +1,7 @@
 from __future__ import annotations
 import html, os, re, requests
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -25,7 +25,9 @@ def _get(url:str,key:str,params:dict)->dict:
     return r.json()
 
 def _download(url,path):
-    with requests.get(url,timeout=90,stream=True) as r:
+    # Wikimedia and Internet Archive can reject anonymous/default Python requests.
+    headers = {"User-Agent": "JackPocketsDocumentary/1.0 (open-media downloader; https://github.com/watfahamid-prog/jack-pockets)"}
+    with requests.get(url,headers=headers,timeout=90,stream=True) as r:
         r.raise_for_status()
         with path.open("wb") as f:
             for chunk in r.iter_content(chunk_size=1024*1024):
@@ -175,6 +177,93 @@ def search_pixabay(query:str,out:Path,limit:int=3)->list[dict]:
         except Exception as exc:
             print(f"[pixabay] photo download failed id={photo_id}: {exc}")
     return result
+
+
+def search_archive_videos(query:str,out:Path,limit:int=3)->list[dict]:
+    """Search Internet Archive for openly licensed documentary b-roll; no API key required."""
+    out.mkdir(parents=True, exist_ok=True)
+    terms = re.findall(r"[a-zA-Z0-9]{3,}", str(query).lower())[:7]
+    if not terms:
+        return []
+    # Search multiple levels of specificity so a long editorial query doesn't return zero hits.
+    variants = [terms[:6], terms[:4], terms[:2]]
+    seen = set()
+    result = []
+    headers = {"User-Agent": "JackPocketsDocumentary/1.0 (open-media search; https://github.com/watfahamid-prog/jack-pockets)"}
+    for selected in variants:
+        if not selected:
+            continue
+        expression = " AND ".join(f'"{term}"' for term in selected)
+        try:
+            response = requests.get(
+                "https://archive.org/advancedsearch.php",
+                params={"q": f"mediatype:movies AND ({expression})",
+                        "fl[]": ["identifier", "title", "description", "licenseurl"],
+                        "rows": 12, "page": 1, "output": "json"},
+                headers=headers, timeout=35)
+            response.raise_for_status()
+            docs = response.json().get("response", {}).get("docs", [])
+        except Exception as exc:
+            print(f"[archive] search failed: {exc}", flush=True)
+            continue
+        print(f"[archive] search results={len(docs)} query={' '.join(selected)!r}", flush=True)
+        for doc in docs:
+            identifier = str(doc.get("identifier") or "")
+            license_url = str(doc.get("licenseurl") or "").lower()
+            if not identifier or identifier in seen:
+                continue
+            # Only use items whose metadata explicitly identifies a permissive/public-domain license.
+            if not any(marker in license_url for marker in (
+                "creativecommons.org/licenses/", "creativecommons.org/publicdomain/",
+                "creativecommons.org/zero/")):
+                continue
+            seen.add(identifier)
+            try:
+                meta_response = requests.get(
+                    f"https://archive.org/metadata/{quote(identifier, safe='')}",
+                    headers=headers, timeout=35)
+                meta_response.raise_for_status()
+                files = meta_response.json().get("files", [])
+                candidates = []
+                for item in files:
+                    name = str(item.get("name") or "")
+                    fmt = str(item.get("format") or "").lower()
+                    size = int(item.get("size") or 0)
+                    ext = os.path.splitext(name)[1].lower()
+                    if ext not in {".mp4", ".webm", ".ogv", ".mov"}:
+                        continue
+                    if size and size < 500_000:
+                        continue
+                    if size and size > 350_000_000:
+                        continue
+                    if "mpeg4" in fmt or "h.264" in fmt or ext in {".mp4", ".webm", ".ogv", ".mov"}:
+                        candidates.append((0 if ext == ".mp4" else 1, size or 10**12, name))
+                if not candidates:
+                    continue
+                candidates.sort()
+                filename = candidates[0][2]
+                media_url = f"https://archive.org/download/{quote(identifier, safe='')}/{quote(filename, safe='/')}"
+                path = out / f"archive-{re.sub(r'[^a-zA-Z0-9_-]+','-',identifier)}{os.path.splitext(filename)[1].lower()}"
+                if not path.exists():
+                    _download(media_url, path)
+                if path.stat().st_size < 500_000:
+                    path.unlink(missing_ok=True)
+                    continue
+                result.append({
+                    "id": f"archive-video-{identifier}", "kind": "video", "src": str(path),
+                    "credit": "Internet Archive: " + str(doc.get("title") or identifier),
+                    "license": "Internet Archive / " + license_url,
+                    "source_url": f"https://archive.org/details/{identifier}",
+                    "score": 0.85, "role": "b-roll", "query": query,
+                })
+                print(f"[archive] selected video={identifier} bytes={path.stat().st_size}", flush=True)
+                if len(result) >= limit:
+                    return result
+            except Exception as exc:
+                print(f"[archive] item failed id={identifier}: {exc}", flush=True)
+    print(f"[archive] usable video results={len(result)} query={query[:100]!r}", flush=True)
+    return result
+
 
 def _commons_search(query:str,out:Path,limit:int=3,kind:str="video")->list[dict]:
     """Find openly licensed Wikimedia Commons media without requiring an API key."""
