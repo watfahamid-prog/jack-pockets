@@ -32,6 +32,31 @@ def validate(path: str) -> list[str]:
     if not manifest.get("audioSrc"):
         errors.append("missing narration audio source")
 
+    # A successful render must be footage-led, not just a slideshow of generated cards.
+    asset_index = {}
+    selected_asset_ids = set()
+    for beat in beats:
+        for asset in beat.get("assets", []):
+            if asset.get("id"):
+                asset_index[str(asset["id"])] = asset
+        for shot in beat.get("shots", []):
+            selected_asset_ids.update(str(x) for x in shot.get("assetIds", []) if x)
+    selected_assets = [asset_index[x] for x in selected_asset_ids if x in asset_index]
+    selected_videos = {str(a.get("id")) for a in selected_assets if a.get("kind") == "video"}
+    real_shots = 0
+    total_shots = 0
+    for beat in beats:
+        for shot in beat.get("shots", []):
+            total_shots += 1
+            chosen = [asset_index.get(str(x), {}) for x in shot.get("assetIds", [])]
+            if any(a.get("kind") in {"video", "photo"} for a in chosen):
+                real_shots += 1
+    if len(selected_videos) < 4:
+        errors.append(f"footage gate: only {len(selected_videos)} distinct real video clips selected; need at least 4")
+    real_ratio = real_shots / max(1, total_shots)
+    if real_ratio < 0.55:
+        errors.append(f"footage gate: only {real_ratio:.0%} of shots use real stock video/photos; need at least 55%")
+
     last_beat_end = 0.0
     for beat in beats:
         beat_id = beat.get("id", "unknown")
