@@ -7,6 +7,7 @@ on:
         description: "Original documentary topic"
         required: true
         type: string
+        default: "The Bizarre Mistake That Changed the Internet Forever"
 
 permissions:
   contents: read
