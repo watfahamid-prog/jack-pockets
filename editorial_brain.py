@@ -50,12 +50,21 @@ def _editorial_dict(value):
 
 
 def _asset_score(asset: dict, sentence_terms: set[str], role: str) -> float:
+    # Score the asset's own searchable metadata, not merely the query that found it.
+    # A provider can return weak results for a broad query; metadata relevance helps
+    # avoid selecting an unrelated clip just because it appeared first.
     query_terms = set(re.findall(r"[a-z0-9]+", str(asset.get("query", "")).lower())) - STOP
     metadata_terms = set()
+    for field in ("title", "description", "tags", "credit"):
+        value = asset.get(field, "")
+        if isinstance(value, (list, tuple, set)):
+            value = " ".join(str(item) for item in value)
+        metadata_terms.update(re.findall(r"[a-z0-9]+", str(value).lower()))
     for value in asset.get("keywords", []) or []:
         metadata_terms.update(re.findall(r"[a-z0-9]+", str(value).lower()))
-    overlap = len(sentence_terms & (query_terms | metadata_terms))
-    score = overlap * 2.0
+    overlap = len(sentence_terms & metadata_terms)
+    query_overlap = len(sentence_terms & query_terms)
+    score = overlap * 5.0 + query_overlap * 0.5
     kind = str(asset.get("kind", "")).lower()
     asset_role = str(asset.get("role", "")).lower()
     # Prefer real footage/photos over synthetic template cards; graphics are supporting evidence only.
