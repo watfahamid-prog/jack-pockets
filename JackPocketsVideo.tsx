@@ -38,7 +38,7 @@ const LayerView: React.FC<{ layer: Layer; beat: Beat; shot: Shot; frame: number;
   }
   if (layer.kind === "highlight") return <div style={{ ...base, background: "linear-gradient(90deg,rgba(245,205,40,.4),rgba(245,205,40,.04))", mixBlendMode: "screen" }} />;
   if (layer.kind === "arrow") return <div style={{ ...base, color: "#fff", fontSize: "4vw", fontWeight: 900, textShadow }}>{layer.text || "→"}</div>;
-  if (layer.kind === "label") return <div style={{ ...base, boxSizing: "border-box", background: "rgba(8,8,8,.68)", border: "1px solid rgba(255,255,255,.22)", borderRadius: 5, padding: "7px 11px", fontFamily: "Arial,sans-serif", fontWeight: 700, fontSize: "1vw", letterSpacing: 1.2, color: "#fff" }}>{layer.text}</div>;
+  if (layer.kind === "label") return <div style={{ ...base, boxSizing: "border-box", background: "transparent", border: "none", borderRadius: 0, padding: 0, fontFamily: "Arial,sans-serif", fontWeight: 700, fontSize: "clamp(20px,1.9vw,38px)", letterSpacing: 0, color: "#52ff4d", textShadow: "0 2px 10px rgba(0,0,0,.9)", whiteSpace: "nowrap" }}>{layer.text}</div>;
   if (layer.kind === "text") return <div style={{ ...base, fontFamily: "Arial Black,Arial,sans-serif", fontWeight: 900, fontSize: "clamp(34px,5vw,96px)", lineHeight: 0.9, letterSpacing: -2, color: "#f5f2ea", textTransform: "uppercase", textShadow, display: "flex", alignItems: "flex-end" }}>{layer.text}</div>;
   return null;
 };
@@ -56,7 +56,7 @@ const ShotView: React.FC<{ beat: Beat; shot: Shot; frame: number; fps: number }>
   return <AbsoluteFill style={{ overflow: "hidden", background: "#080808", transform: `translateX(${dx}px) scale(${scale})` }}>
     {shot.layers.map(layer => <LayerView key={layer.id} layer={layer} beat={beat} shot={shot} frame={frame} fps={fps} />)}
     {flashOpacity > 0 && <AbsoluteFill style={{ background: "#fff", opacity: flashOpacity, zIndex: 30 }} />}
-    <AbsoluteFill style={{ pointerEvents: "none", boxShadow: "inset 0 0 160px rgba(0,0,0,.36)", zIndex: 32 }} />
+    <AbsoluteFill style={{ pointerEvents: "none", boxShadow: "inset 0 0 70px rgba(0,0,0,.12)", zIndex: 32 }} />
     <AbsoluteFill style={{ pointerEvents: "none", background: "linear-gradient(180deg,rgba(0,0,0,.2),transparent 22%,transparent 78%,rgba(0,0,0,.28))", zIndex: 33 }} />
   </AbsoluteFill>;
 };
@@ -84,7 +84,7 @@ export const JackPocketsVideo: React.FC<{ manifest: VideoManifest }> = ({ manife
   const time = frame / fps;
   const activeBeat = manifest.beats.find(beat => time >= beat.start && time < beat.end);
   const activeShot = activeBeat?.shots.find(shot => time >= activeBeat.start + shot.start && time < activeBeat.start + shot.end);
-  const caption = captionAt(manifest.captions, time);
+  const caption = manifest.showCaptions ? captionAt(manifest.captions, time) : "";
 
   return <AbsoluteFill style={{ background: "#101010", overflow: "hidden" }}>
     {activeBeat && activeShot
@@ -92,9 +92,9 @@ export const JackPocketsVideo: React.FC<{ manifest: VideoManifest }> = ({ manife
       : <AbsoluteFill style={{ background: "#080808" }} />}
     <AbsoluteFill style={{ pointerEvents: "none", zIndex: 80 }}>
       {caption && <div style={{ position: "absolute", left: "12%", right: "12%", bottom: "6%", minHeight: 52, display: "flex", alignItems: "center", justifyContent: "center", padding: "8px 18px", boxSizing: "border-box", background: "rgba(0,0,0,.32)", fontFamily: "Arial,sans-serif", fontSize: "clamp(22px,2.15vw,40px)", fontWeight: 800, color: "#fff", textShadow: "0 2px 12px #000", textAlign: "center" }}>{caption}</div>}
-      <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 3, background: "rgba(255,255,255,.16)" }}>
+      {manifest.showProgressBar && <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 3, background: "rgba(255,255,255,.16)" }}>
         <div style={{ height: "100%", width: `${Math.min(100, time / manifest.duration * 100)}%`, background: "#e8c547" }} />
-      </div>
+      </div>}
     </AbsoluteFill>
     {manifest.audioSrc && <Audio src={staticFile(manifest.audioSrc)} />}
     {manifest.musicSrc && <Audio src={staticFile(manifest.musicSrc)} volume={0.075} />}

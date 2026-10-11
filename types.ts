@@ -12,4 +12,4 @@ export type VisualAsset={id:string;kind:AssetKind;src:string;credit?:string;lice
 export type Word={word:string;start:number;end:number};
 export type Shot={id:string;start:number;end:number;reason:CutReason;intent:EditorialIntent;assetIds:string[];layers:Layer[];actions:EditAction[];sfx:SfxCue[];intensity:number};
 export type Beat={id:string;kind:BeatKind;narration:string;start:number;end:number;intensity:number;keywords:string[];assets:VisualAsset[];overlays:Array<{type:OverlayKind;text:string}>;actions:EditAction[];sfx:SfxCue[];shots:Shot[]};
-export type VideoManifest={title:string;topic:string;duration:number;fps:number;width:number;height:number;audioSrc:string;musicSrc?:string;beats:Beat[];captions:Word[];sources?:string[];version:number};
+export type VideoManifest={title:string;topic:string;duration:number;fps:number;width:number;height:number;audioSrc:string;musicSrc?:string;showCaptions?:boolean;showProgressBar?:boolean;beats:Beat[];captions:Word[];sources?:string[];version:number};
