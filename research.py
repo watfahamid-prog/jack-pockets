@@ -2,11 +2,57 @@ from __future__ import annotations
 
 import os
 import re
+from urllib.parse import urlparse
+
 import requests
 
 HEADERS = {
     "User-Agent": "JackPocketsDocumentary/1.0 (research and source attribution; https://github.com/watfahamid-prog/jack-pockets)"
 }
+
+
+def _valid_http_url(url: object) -> bool:
+    if not isinstance(url, str):
+        return False
+    parsed = urlparse(url.strip())
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+
+def _perplexity(query: str, limit: int) -> list[dict]:
+    """Fetch ranked, structured web results from Perplexity; no LLM answer parsing needed."""
+    key = os.getenv("PERPLEXITY_API_KEY", "").strip()
+    if not key:
+        return []
+
+    response = requests.post(
+        "https://api.perplexity.ai/search",
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        json={
+            "query": query,
+            "max_results": max(1, min(int(limit), 10)),
+            # Fast Search is appropriate for frequent beat-level research and is cheaper.
+            "search_type": "fast",
+        },
+        timeout=30,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    results = []
+    for item in payload.get("results", []):
+        url = str(item.get("url") or "").strip()
+        if not _valid_http_url(url):
+            continue
+        results.append({
+            "title": str(item.get("title") or url).strip(),
+            "url": url,
+            "content": str(item.get("snippet") or "")[:2200],
+            "source_type": "perplexity_search",
+            "published_date": item.get("date"),
+            "last_updated": item.get("last_updated"),
+        })
+        if len(results) >= limit:
+            break
+    return results
 
 
 def _tavily(query: str, limit: int) -> list[dict]:
@@ -21,8 +67,8 @@ def _tavily(query: str, limit: int) -> list[dict]:
     response.raise_for_status()
     results = []
     for item in response.json().get("results", []):
-        url = item.get("url")
-        if not url:
+        url = str(item.get("url") or "").strip()
+        if not _valid_http_url(url):
             continue
         results.append({
             "title": item.get("title") or url,
@@ -107,7 +153,7 @@ def _wikipedia(query: str, limit: int) -> list[dict]:
         title = page.get("title", "")
         url = page.get("fullurl")
         extract = re.sub(r"\s+", " ", str(page.get("extract") or "")).strip()
-        if not title or not url:
+        if not title or not _valid_http_url(url):
             continue
         results.append({
             "title": title,
@@ -122,22 +168,33 @@ def _wikipedia(query: str, limit: int) -> list[dict]:
         })
     return results
 
+
 def search_web(query: str, limit: int = 6) -> list[dict]:
-    """Collect multiple source types; Wikipedia supplies context, not final verification."""
+    """Prefer Perplexity's structured live search, with existing research sources as fallbacks."""
     limit = max(1, min(int(limit), 10))
     results = []
 
     try:
-        results.extend(_tavily(query, max(2, limit - 2)))
+        results.extend(_perplexity(query, limit))
+        if results:
+            print(f"[research] Perplexity returned {len(results)} web sources.", flush=True)
     except Exception as exc:
-        print(f"[research] Tavily search failed: {exc}", flush=True)
+        # A failed or unavailable Perplexity call must not break video generation.
+        print(f"[research] Perplexity search failed; trying fallbacks: {exc}", flush=True)
 
-    # Add a small Wikipedia context set on every topic. The API is public and requires no key.
-    # Keep it after search results so it cannot displace stronger sources.
-    try:
-        results.extend(_wikipedia(query, min(2, limit)))
-    except Exception as exc:
-        print(f"[research] Wikipedia search skipped: {exc}", flush=True)
+    # Tavily is a fallback rather than a second paid search on every query.
+    if not results:
+        try:
+            results.extend(_tavily(query, max(2, limit - 2)))
+        except Exception as exc:
+            print(f"[research] Tavily search failed: {exc}", flush=True)
+
+    # Add a small Wikipedia context set when space remains. It is not final proof.
+    if len(results) < limit:
+        try:
+            results.extend(_wikipedia(query, min(2, limit - len(results))))
+        except Exception as exc:
+            print(f"[research] Wikipedia search skipped: {exc}", flush=True)
 
     # Biomedical literature is useful for health, anatomy, biology, and medical topics.
     science_terms = (
@@ -145,9 +202,9 @@ def search_web(query: str, limit: int = 6) -> list[dict]:
         "brain", "medical", "medicine", "health", "disease", "science", "anatom",
         "physiology", "evolution", "genetic", "species", "research", "study",
     )
-    if any(term in query.lower() for term in science_terms) or len(results) < min(limit, 4):
+    if (any(term in query.lower() for term in science_terms) or len(results) < min(limit, 4)) and len(results) < limit:
         try:
-            results.extend(_europe_pmc(query, min(4, limit)))
+            results.extend(_europe_pmc(query, min(4, limit - len(results))))
         except Exception as exc:
             print(f"[research] Europe PMC search skipped: {exc}", flush=True)
 
@@ -155,7 +212,7 @@ def search_web(query: str, limit: int = 6) -> list[dict]:
     seen = set()
     for item in results:
         url = str(item.get("url") or "").strip()
-        if not url or url in seen:
+        if not _valid_http_url(url) or url in seen:
             continue
         seen.add(url)
         unique.append(item)
