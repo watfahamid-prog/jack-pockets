@@ -318,14 +318,29 @@ def main() -> None:
     audio_stream = next((stream for stream in streams if stream.get("codec_type") == "audio"), None)
     if not video or not audio_stream:
         raise SystemExit("FINAL QC FAILED: missing video or audio stream")
-    if (video.get("width"), video.get("height")) != (1920, 1080):
-        raise SystemExit("FINAL QC FAILED: output is not 1920x1080")
-    if video.get("r_frame_rate") != "60/1":
-        raise SystemExit("FINAL QC FAILED: output is not 60 FPS")
+    expected = PROFILES[args.profile]
+    if (video.get("width"), video.get("height")) != (expected["width"], expected["height"]):
+        raise SystemExit(
+            f"FINAL QC FAILED: output is not {expected['width']}x{expected['height']}"
+        )
+    rate = str(video.get("avg_frame_rate") or video.get("r_frame_rate") or "0/0")
+    try:
+        numerator, denominator = rate.split("/", 1)
+        actual_fps = float(numerator) / float(denominator)
+    except (ValueError, ZeroDivisionError):
+        actual_fps = 0.0
+    if abs(actual_fps - expected["fps"]) > 0.1:
+        raise SystemExit(
+            f"FINAL QC FAILED: output is {actual_fps:g} FPS; expected {expected['fps']} FPS"
+        )
     duration = float(info.get("format", {}).get("duration", 0))
     if duration < 480 or duration > 1800:
         raise SystemExit(f"FINAL QC FAILED: duration {duration:.2f}s outside 8-30 minute range")
-    print(f"FINAL QC PASSED: {out} | {duration:.2f}s | 1920x1080 | 60fps | audio=yes", flush=True)
+    print(
+        f"FINAL QC PASSED: {out} | {duration:.2f}s | "
+        f"{expected['width']}x{expected['height']} | {actual_fps:g}fps | audio=yes",
+        flush=True,
+    )
 
 
 if __name__ == "__main__":
