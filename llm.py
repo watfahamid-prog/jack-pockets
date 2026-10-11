@@ -109,7 +109,7 @@ def _gemini(topic: str, research: list[dict] | None = None) -> dict:
     last_error = None
 
     for model in models:
-        for attempt in range(2):
+        for attempt in range(3):
             try:
                 response = client.models.generate_content(
                     model=model,
@@ -148,12 +148,14 @@ def _gemini(topic: str, research: list[dict] | None = None) -> dict:
                     )
                     time.sleep(1)
                     continue
-                if attempt == 0 and transient:
+                if transient and attempt < 2:
+                    delay = 2 if attempt == 0 else 5
                     print(
-                        f"[llm] Gemini model {model} transient failure; retrying once: {exc}",
+                        f"[llm] Gemini model {model} transient failure; retrying in {delay}s "
+                        f"(attempt {attempt + 2}/3): {exc}",
                         flush=True,
                     )
-                    time.sleep(2)
+                    time.sleep(delay)
                     continue
                 print(
                     f"[llm] Gemini model {model} failed"
