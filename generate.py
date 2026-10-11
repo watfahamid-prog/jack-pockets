@@ -27,6 +27,39 @@ def public_path(path: Path) -> str:
     return str(path.relative_to("public")).replace("\\", "/")
 
 
+def _relevant_sources(topic: str, beat: dict, sources: list[dict], limit: int = 3) -> list[str]:
+    """Return only sources whose title/content overlaps the actual beat subject."""
+    stopwords = {
+        "about", "after", "again", "also", "because", "been", "before", "being",
+        "could", "did", "does", "during", "from", "have", "into", "more", "most",
+        "other", "over", "same", "some", "such", "than", "that", "their", "them",
+        "then", "there", "these", "they", "this", "those", "through", "under",
+        "very", "what", "when", "where", "which", "while", "with", "would",
+        "documentary", "story", "mistake", "forever", "bizarre", "internet",
+    }
+    subject = f"{topic} {beat.get('title', '')} {str(beat.get('narration', ''))[:260]}"
+    terms = {
+        token for token in re.findall(r"[a-z0-9]{3,}", subject.lower())
+        if token not in stopwords and not token.isdigit()
+    }
+    ranked = []
+    for item in sources:
+        if not isinstance(item, dict) or not item.get("url"):
+            continue
+        searchable = " ".join((
+            str(item.get("title", "")),
+            str(item.get("content", ""))[:1800],
+            str(item.get("url", "")),
+        )).lower()
+        hits = {term for term in terms if term in searchable}
+        # Avoid assigning generic or unrelated search results as evidence.
+        if len(hits) < 2:
+            continue
+        ranked.append((len(hits), str(item["url"])))
+    ranked.sort(key=lambda pair: pair[0], reverse=True)
+    return list(dict.fromkeys(url for _, url in ranked))[:limit]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate an editorially planned documentary video.")
     parser.add_argument("--topic", required=True)
@@ -66,6 +99,12 @@ def main() -> None:
             print(f"[research] beat {index} search skipped: {exc}", flush=True)
             found = []
         beat["research"] = found
+        verified_candidate_urls = _relevant_sources(args.topic, beat, found)
+        # Do not leave empty citations when relevant, beat-specific research exists;
+        # equally, do not attach unrelated search results just to fill the field.
+        beat["source_urls"] = verified_candidate_urls
+        if not verified_candidate_urls:
+            print(f"[research] beat {index}: no sufficiently relevant source found; claims need review", flush=True)
         research.extend(found)
 
     # Include both research gathered before writing and beat-specific follow-up sources.
