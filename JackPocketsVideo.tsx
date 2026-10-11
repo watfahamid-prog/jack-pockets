@@ -38,7 +38,8 @@ const LayerView: React.FC<{ layer: Layer; beat: Beat; shot: Shot; frame: number;
   }
   if (layer.kind === "highlight") return <div style={{ ...base, background: "linear-gradient(90deg,rgba(245,205,40,.4),rgba(245,205,40,.04))", mixBlendMode: "screen" }} />;
   if (layer.kind === "arrow") return <div style={{ ...base, color: "#fff", fontSize: "4vw", fontWeight: 900, textShadow }}>{layer.text || "→"}</div>;
-  if (layer.kind === "label") return <div style={{ ...base, boxSizing: "border-box", background: "transparent", border: "none", borderRadius: 0, padding: 0, fontFamily: "Arial,sans-serif", fontWeight: 700, fontSize: "clamp(20px,1.9vw,38px)", letterSpacing: 0, color: "#52ff4d", textShadow: "0 2px 10px rgba(0,0,0,.9)", whiteSpace: "nowrap" }}>{layer.text}</div>;
+  // Editorial/debug labels such as "B ROLL", "LOCATION", and "None" are internal metadata, not viewer-facing graphics.
+  if (layer.kind === "label") return null;
   if (layer.kind === "text") return <div style={{ ...base, fontFamily: "Arial Black,Arial,sans-serif", fontWeight: 900, fontSize: "clamp(34px,5vw,96px)", lineHeight: 0.9, letterSpacing: -2, color: "#f5f2ea", textTransform: "uppercase", textShadow, display: "flex", alignItems: "flex-end" }}>{layer.text}</div>;
   return null;
 };
