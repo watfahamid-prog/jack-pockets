@@ -27,6 +27,36 @@ def public_path(path: Path) -> str:
     return str(path.relative_to("public")).replace("\\", "/")
 
 
+def _asset_relevance(query: str, beat: dict, asset: dict) -> tuple[bool, list[str]]:
+    """Reject stock results whose own metadata does not describe the intended shot."""
+    stopwords = {
+        "about", "after", "again", "also", "because", "been", "before", "being",
+        "could", "did", "does", "during", "from", "have", "into", "more", "most",
+        "other", "over", "same", "some", "such", "than", "that", "their", "them",
+        "then", "there", "these", "they", "this", "those", "through", "under",
+        "very", "what", "when", "where", "which", "while", "with", "would",
+        "documentary", "story", "mistake", "forever", "bizarre", "internet",
+        "footage", "video", "shot", "scene", "show", "showing", "clip",
+    }
+    target_text = " ".join([
+        query, str(beat.get("title", "")),
+        " ".join(str(x) for x in beat.get("keywords", [])),
+    ])
+    target = {
+        token for token in re.findall(r"[a-z0-9]{3,}", target_text.lower())
+        if token not in stopwords and not token.isdigit()
+    }
+    metadata = " ".join(str(asset.get(key, "")) for key in (
+        "title", "description", "tags", "query", "beat_title",
+    )).lower()
+    # Pexels titles are often URL slugs; tags from Pixabay/Commons are also useful.
+    found = sorted(term for term in target if term in metadata)
+    # Broad searches with only one meaningful concept need one match; more specific
+    # queries need at least two distinct matching terms to avoid unrelated filler.
+    required = 2 if len(target) >= 4 else 1
+    return len(found) >= required, found
+
+
 def _relevant_sources(topic: str, beat: dict, sources: list[dict], limit: int = 3) -> list[str]:
     """Return only sources whose title/content overlaps the actual beat subject."""
     stopwords = {
@@ -188,6 +218,15 @@ def main() -> None:
                         break
 
             for item in candidates:
+                relevant, matched_terms = _asset_relevance(query, beat, item)
+                if not relevant:
+                    print(
+                        f"[assets] rejected unrelated result provider={item.get('license', 'unknown')} "
+                        f"beat={index + 1} title={str(item.get('title', ''))[:100]!r} "
+                        f"matched={matched_terms}",
+                        flush=True,
+                    )
+                    continue
                 asset_id = str(item.get("id", ""))
                 if asset_id and asset_id in used_asset_ids:
                     continue
@@ -197,6 +236,7 @@ def main() -> None:
                 item["keywords"] = beat_keywords
                 item["beat_title"] = title
                 item["beat_narration"] = first_sentence
+                item["relevance_terms"] = matched_terms
                 item["src"] = public_path(Path(item["src"]))
                 stock_assets.append(item)
 
