@@ -106,7 +106,7 @@ def _wikipedia(query: str, limit: int) -> list[dict]:
     for page in ranked:
         title = page.get("title", "")
         url = page.get("fullurl")
-        extract = re.sub(r"\\s+", " ", str(page.get("extract") or "")).strip()
+        extract = re.sub(r"\s+", " ", str(page.get("extract") or "")).strip()
         if not title or not url:
             continue
         results.append({
