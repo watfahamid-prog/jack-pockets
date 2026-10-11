@@ -1,0 +1,75 @@
+name: Experimental EffectCraft demo render
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/effectcraft-demo-render.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: effectcraft-demo-render
+  cancel-in-progress: false
+
+jobs:
+  demo-render:
+    name: Build and render EffectCraft demo (isolated)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout Jack Pockets
+        uses: actions/checkout@v4
+
+      - name: Checkout EffectCraft source
+        uses: actions/checkout@v4
+        with:
+          repository: storytold/effectcraft
+          path: effectcraft-src
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libasound2-dev libudev-dev ffmpeg
+
+      - name: Install Rust 1.95+
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: effectcraft-src
+
+      - name: Build EffectCraft CLI
+        working-directory: effectcraft-src
+        run: cargo build --release -p effectcraft-cli
+
+      - name: Render built-in demo
+        working-directory: effectcraft-src
+        timeout-minutes: 15
+        run: |
+          mkdir -p ../effectcraft-demo-output
+          set -o pipefail
+          ./target/release/effectcraft-cli render --out ../effectcraft-demo-output/effectcraft-demo.mp4 2>&1 | tee ../effectcraft-demo-output/render.log
+
+      - name: Verify video and audio streams
+        if: always()
+        run: |
+          mkdir -p effectcraft-demo-output
+          if [ -f effectcraft-demo-output/effectcraft-demo.mp4 ]; then
+            ls -lh effectcraft-demo-output/effectcraft-demo.mp4
+            ffprobe -v error -show_entries format=duration,size:stream=codec_type,codec_name,width,height,sample_rate,channels -of json effectcraft-demo-output/effectcraft-demo.mp4 | tee effectcraft-demo-output/media-probe.json
+          else
+            echo "No MP4 was produced by EffectCraft."
+            exit 1
+          fi
+
+      - name: Upload demo and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: effectcraft-demo-render-${{ github.run_number }}
+          path: effectcraft-demo-output/
+          if-no-files-found: warn
+          retention-days: 7
