@@ -7,7 +7,7 @@ on:
         description: "Original documentary topic"
         required: true
         type: string
-        default: "The Bizarre Mistake That Changed the Internet Forever"
+        default: "The 1997 AS 7007 Internet Routing Incident: How One Router Disrupted Internet Traffic"
 
 permissions:
   contents: read
