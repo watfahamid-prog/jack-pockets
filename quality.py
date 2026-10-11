@@ -13,8 +13,8 @@ def validate(path: str) -> list[str]:
     beats = manifest.get("beats") or []
     if not beats:
         errors.append("manifest has no beats")
-    if manifest.get("fps") != 60:
-        errors.append("output must be 60fps")
+    if manifest.get("fps") != 30:
+        errors.append("output must be 30fps to match the reference cadence and reduce render cost")
     if (manifest.get("width"), manifest.get("height")) != (1920, 1080):
         errors.append("output must be 1920x1080")
 

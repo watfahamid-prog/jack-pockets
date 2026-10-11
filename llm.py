@@ -2,6 +2,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 
 from dotenv import load_dotenv
 
@@ -94,22 +95,62 @@ def _research_prompt(topic: str, research: list[dict] | None) -> str:
 def _gemini(topic: str, research: list[dict] | None = None) -> dict:
     from google import genai
     from google.genai import types
+
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-    model = os.getenv("GEMINI_MODEL") or "gemini-3.8-flash"
+    primary = (os.getenv("GEMINI_MODEL") or "gemini-3.8-flash").strip()
+    fallback_text = os.getenv(
+        "GEMINI_FALLBACK_MODELS",
+        "gemini-3.6-flash,gemini-3.5-flash-lite",
+    )
+    models = list(dict.fromkeys(
+        [primary] + [item.strip() for item in fallback_text.split(",") if item.strip()]
+    ))
     prompt = _research_prompt(topic, research)
     last_error = None
-    for attempt in range(2):
-        try:
-            response = client.models.generate_content(
-                model=model, contents=prompt,
-                config=types.GenerateContentConfig(temperature=0.65 if attempt == 0 else 0.25, response_mime_type="application/json"),
-            )
-            return _normalize_plan(_parse_json(response.text), topic)
-        except Exception as exc:
-            last_error = exc
-            if attempt == 0:
-                print(f"[llm] Gemini plan attempt 1 failed; retrying: {exc}", flush=True)
-    raise last_error
+
+    for model in models:
+        for attempt in range(2):
+            try:
+                response = client.models.generate_content(
+                    model=model,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        temperature=0.65 if attempt == 0 else 0.25,
+                        response_mime_type="application/json",
+                    ),
+                )
+                plan = _normalize_plan(_parse_json(response.text), topic)
+                print(f"[llm] Gemini succeeded with model {model}", flush=True)
+                return plan
+            except Exception as exc:
+                last_error = exc
+                message = str(exc).lower()
+                transient = any(marker in message for marker in (
+                    "503", "unavailable", "429", "resource_exhausted",
+                    "rate limit", "temporarily", "timeout", "deadline",
+                    "500 internal", "502", "504",
+                ))
+                if attempt == 0 and transient:
+                    print(
+                        f"[llm] Gemini model {model} transient failure; retrying once: {exc}",
+                        flush=True,
+                    )
+                    time.sleep(2)
+                    continue
+                print(
+                    f"[llm] Gemini model {model} failed"
+                    + (" after retry" if attempt else "")
+                    + f"; trying next configured model if available: {exc}",
+                    flush=True,
+                )
+                break
+
+    raise RuntimeError(
+        "Gemini model rotation exhausted ("
+        + ", ".join(models)
+        + "). Last error: "
+        + str(last_error)
+    ) from last_error
 
 def _openai(topic: str, research: list[dict] | None = None) -> dict:
     from openai import OpenAI
@@ -129,7 +170,7 @@ def _anthropic(topic: str, research: list[dict] | None = None) -> dict:
     from anthropic import Anthropic
     client = Anthropic()
     response = client.messages.create(
-        model=os.getenv("ANTHROPIC_MODEL") or "claude-3-5-sonnet-latest",
+        model=os.getenv("ANTHROPIC_MODEL") or "claude-sonnet-5-5",
         max_tokens=9000,
         system=SYSTEM,
         messages=[{"role": "user", "content": _research_prompt(topic, research)}],

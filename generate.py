@@ -16,7 +16,7 @@ from research import search_web
 from sfx import create_sound_effects
 from tts import synthesize
 
-PROFILES = {"youtube": {"width": 1920, "height": 1080, "fps": 60}}
+PROFILES = {"youtube": {"width": 1920, "height": 1080, "fps": 30}}
 
 
 def slug(value: str) -> str:
@@ -253,9 +253,59 @@ def main() -> None:
         [
             "npx", "remotion", "render", "index.tsx", "JackPocketsVideo", str(out),
             "--props", str(props_path), "--codec=h264", "--audio-codec=aac",
-            "--pixel-format=yuv420p", "--crf=18", "--enforce-audio-track",
+            "--pixel-format=yuv420p", "--crf=20", "--enforce-audio-track",
         ],
         check=True,
+    )
+
+    # Validate the encoded MP4 itself, not just the source manifest.
+    if not out.exists() or out.stat().st_size < 100_000:
+        raise RuntimeError(f"Render produced no usable MP4: {out}")
+    probe = subprocess.run(
+        [
+            "ffprobe", "-v", "error", "-show_entries",
+            "format=duration:stream=codec_type,width,height,avg_frame_rate",
+            "-of", "json", str(out),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    media = json.loads(probe.stdout)
+    video_streams = [item for item in media.get("streams", []) if item.get("codec_type") == "video"]
+    audio_streams = [item for item in media.get("streams", []) if item.get("codec_type") == "audio"]
+    if not video_streams:
+        raise RuntimeError("Rendered MP4 has no video stream")
+    if not audio_streams:
+        raise RuntimeError("Rendered MP4 has no audio stream")
+    video_stream = video_streams[0]
+    expected = PROFILES[args.profile]
+    if (video_stream.get("width"), video_stream.get("height")) != (expected["width"], expected["height"]):
+        raise RuntimeError(
+            f"Rendered dimensions are {video_stream.get('width')}x{video_stream.get('height')}; "
+            f"expected {expected['width']}x{expected['height']}"
+        )
+    rate = str(video_stream.get("avg_frame_rate") or "0/0")
+    try:
+        numerator, denominator = rate.split("/", 1)
+        actual_fps = float(numerator) / float(denominator)
+    except (ValueError, ZeroDivisionError):
+        actual_fps = 0.0
+    if abs(actual_fps - expected["fps"]) > 0.1:
+        raise RuntimeError(f"Rendered frame rate is {rate}; expected {expected['fps']} fps")
+    actual_duration = float((media.get("format") or {}).get("duration") or 0)
+    if actual_duration < 480 or actual_duration > 1800:
+        raise RuntimeError(f"Rendered duration {actual_duration:.1f}s is outside the 8–30 minute gate")
+    if abs(actual_duration - float(manifest["duration"])) > 5:
+        raise RuntimeError(
+            f"Rendered duration {actual_duration:.1f}s differs from manifest "
+            f"{float(manifest['duration']):.1f}s by more than 5s"
+        )
+    print(
+        f"[quality] rendered MP4 verified: {actual_duration / 60:.2f} min, "
+        f"{expected['width']}x{expected['height']} at {actual_fps:.0f} fps, "
+        f"audio stream present, {out.stat().st_size / (1024 * 1024):.1f} MiB",
+        flush=True,
     )
 
     probe = subprocess.run(

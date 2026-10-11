@@ -19,7 +19,7 @@ concurrency:
 jobs:
   generate:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -59,7 +59,7 @@ jobs:
           test -f index.tsx
           test -f JackPocketsVideo.tsx
 
-      - name: Generate documentary
+      - name: Generate 1080p30 documentary
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ secrets.GEMINI_MODEL }}
@@ -83,6 +83,12 @@ jobs:
           name: jack-pockets-documentary-${{ github.run_number }}
           path: |
             out/*.mp4
-            public/runs/
+            public/runs/**/manifest.json
+            public/runs/**/plan.json
+            public/runs/**/research.json
+            public/runs/**/render-props.json
+            public/runs/**/alignment.json
+            public/runs/**/narration.mp3
+            public/runs/**/music-bed.json
           if-no-files-found: warn
           retention-days: 14
