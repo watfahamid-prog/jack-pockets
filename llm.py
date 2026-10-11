@@ -8,14 +8,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-MIN_NARRATION_WORDS = 1100
+MIN_NARRATION_WORDS = 1400
 
 SYSTEM = """You are the editorial brain for an automated premium documentary editor.
 Create an ORIGINAL factual long-form documentary plan. Do not copy any existing creator's script, wording, or finished video.
 
 The result must feel like a professionally researched cinematic YouTube documentary, not a ranking list, slideshow, AI summary, or sequence of generic text cards. Do not default to Top 5/Top 10 formats. Build a compelling story around a specific question, stakes, surprising details, and a satisfying answer. Use a vivid cold open in the first 2-3 sentences, then context, escalating curiosity, evidence and competing explanations, a meaningful reveal, consequences, and a memorable conclusion. Write conversational narration that sounds natural aloud. Never invent quotes, statistics, dates, or events. Treat supplied research as evidence, not decoration: do not claim a source supports a point unless its title/snippet/abstract actually relates to that point. Prefer peer-reviewed research, government/university sources, primary documents, and reputable reporting over unsourced summaries. If the evidence is uncertain or sources disagree, say so in the narration. Never turn an unverified internet claim into a confident fact. Every beat must include a "source_urls" array containing URLs from the supplied research that directly support its factual claims; use an empty array rather than inventing a source. Give every beat concrete, searchable visual subjects (real places, people, objects, actions, archival material), specific footage keywords rather than vague mood words, and restrained overlays only for essential names, dates, figures, or short reveals. Prefer moving B-roll and evidence-led visuals; do not make every beat a title card.
 
-Target a finished documentary around 8-14 minutes. Aim for roughly 1,300-1,800 spoken words at a natural documentary pace. Each of the 8-14 beats should contain substantial narration (usually 120-180 words); do not return a short summary. Do not pad the story just to hit a runtime.
+Target a finished documentary around 8-14 minutes. Aim for roughly 1,500-1,900 spoken words at a natural documentary pace so the finished narration reliably clears the 8-minute minimum. Each of the 8-14 beats should contain substantial narration (usually 140-200 words); do not return a short summary. Do not pad the story just to hit a runtime.
 
 Use a strong narrative arc: cinematic cold-open, context, escalation, evidence and competing explanations, reveal, fallout, and a memorable ending. Every beat must advance the story. Every sentence should have a visual reason, and factual claims should be specific enough to research.
 
