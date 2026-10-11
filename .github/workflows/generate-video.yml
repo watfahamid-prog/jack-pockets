@@ -72,6 +72,7 @@ jobs:
           TTS_VOICE: en-US-GuyNeural
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
           MUSIC_URL: ${{ secrets.MUSIC_URL }}
         run: python generate.py --topic "${{ inputs.topic }}" --assets-per-beat 2
