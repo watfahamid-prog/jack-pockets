@@ -28,18 +28,21 @@ def public_path(path: Path) -> str:
 
 
 def _asset_relevance(query: str, beat: dict, asset: dict) -> tuple[bool, list[str]]:
-    """Reject stock results whose own metadata does not describe the intended shot."""
+    """Match stock media to the beat's actual visual subject, not a long narration prompt."""
     stopwords = {
+        "the", "and", "for", "with", "from", "into", "onto", "over", "under",
         "about", "after", "again", "also", "because", "been", "before", "being",
-        "could", "did", "does", "during", "from", "have", "into", "more", "most",
-        "other", "over", "same", "some", "such", "than", "that", "their", "them",
-        "then", "there", "these", "they", "this", "those", "through", "under",
-        "very", "what", "when", "where", "which", "while", "with", "would",
+        "could", "did", "does", "during", "have", "more", "most", "other", "same",
+        "some", "such", "than", "that", "their", "them", "then", "there", "these",
+        "they", "this", "those", "through", "very", "what", "when", "where", "which",
+        "while", "would", "your", "you", "are", "was", "were", "has", "had", "its",
         "documentary", "story", "mistake", "forever", "bizarre", "internet",
-        "footage", "video", "shot", "scene", "show", "showing", "clip",
+        "footage", "video", "shot", "scene", "show", "showing", "clip", "visualization",
+        "animation", "visual", "moment", "opens", "exposed",
     }
+    # Use compact editorial metadata; long narration strings contain incidental words.
     target_text = " ".join([
-        query, str(beat.get("title", "")),
+        str(beat.get("title", "")),
         " ".join(str(x) for x in beat.get("keywords", [])),
     ])
     target = {
@@ -47,15 +50,12 @@ def _asset_relevance(query: str, beat: dict, asset: dict) -> tuple[bool, list[st
         if token not in stopwords and not token.isdigit()
     }
     metadata = " ".join(str(asset.get(key, "")) for key in (
-        "title", "description", "tags", "query", "beat_title",
-    )).lower()
-    # Pexels titles are often URL slugs; tags from Pixabay/Commons are also useful.
+        "title", "description", "tags",
+    )).lower().replace("-", " ").replace("_", " ")
     found = sorted(term for term in target if term in metadata)
-    # Broad searches with only one meaningful concept need one match; more specific
-    # queries need at least two distinct matching terms to avoid unrelated filler.
-    required = 2 if len(target) >= 4 else 1
+    # A strong match on one specific term beats unrelated generic filler.
+    required = 2 if len(target) >= 5 else 1
     return len(found) >= required, found
-
 
 def _relevant_sources(topic: str, beat: dict, sources: list[dict], limit: int = 3) -> list[str]:
     """Return only sources whose title/content overlaps the actual beat subject."""
@@ -160,16 +160,18 @@ def main() -> None:
     used_asset_ids: set[str] = set()
     for index, beat in enumerate(plan.get("beats", [])):
         title = str(beat.get("title", "")).strip()
-        beat_keywords = [str(x).strip() for x in beat.get("keywords", []) if str(x).strip()]
+        raw_keywords = beat.get("keywords", [])
+        if isinstance(raw_keywords, str):
+            raw_keywords = re.split(r"[,;|]", raw_keywords)
+        beat_keywords = [str(x).strip() for x in raw_keywords if str(x).strip()]
         narration_text = str(beat.get("narration", "")).strip()
-        first_sentence = re.split(r"(?<=[.!?])\s+", narration_text)[0][:180]
-        # Search meaningful visual phrases, not isolated first/second keywords.
-        keyword_phrase = " ".join(beat_keywords[:3])
-        queries = list(dict.fromkeys(q for q in [
-            title,
-            keyword_phrase,
-            first_sentence,
-        ] if q))
+        # Model outputs sometimes put a whole SEO phrase in one keyword field.
+        # Flatten it and keep searches short enough for stock libraries to understand.
+        keyword_tokens = []
+        for keyword in beat_keywords:
+            keyword_tokens.extend(re.findall(r"[a-zA-Z0-9]{3,}", keyword))
+        keyword_phrase = " ".join(dict.fromkeys(keyword_tokens[:4]))
+        queries = list(dict.fromkeys(q for q in [title, keyword_phrase] if q))
         queries = queries[:min(2, args.assets_per_beat)]
         stock_assets = []
         generated_assets = []
