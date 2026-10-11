@@ -189,6 +189,14 @@ def search_archive_videos(query:str,out:Path,limit:int=3)->list[dict]:
     variants = [terms[:4], terms[:2]]
     seen = set()
     result = []
+    # Search endpoints can return unrelated films because terms like "terminal",
+    # "black", or "architecture" have multiple meanings. Reject assets whose own
+    # metadata does not match the requested visual subject.
+    stopwords = {"the", "and", "for", "with", "from", "that", "this", "into", "onto",
+                 "over", "under", "near", "shot", "close", "view", "show", "showing",
+                 "footage", "video", "image", "scene", "cinematic", "modern", "vintage"}
+    query_terms = {term for term in re.findall(r"[a-zA-Z]{4,}", str(query).lower())
+                   if term not in stopwords}
     headers = {"User-Agent": "JackPocketsDocumentary/1.0 (open-media search; https://github.com/watfahamid-prog/jack-pockets)"}
     for selected in variants:
         if not selected:
@@ -211,6 +219,16 @@ def search_archive_videos(query:str,out:Path,limit:int=3)->list[dict]:
             identifier = str(doc.get("identifier") or "")
             license_url = str(doc.get("licenseurl") or "").lower()
             if not identifier or identifier in seen:
+                continue
+            metadata_text = (str(doc.get("title") or "") + " " +
+                             str(doc.get("description") or "")[:1800]).lower()
+            matched_terms = {term for term in query_terms if term in metadata_text}
+            if len(query_terms) >= 3 and len(matched_terms) < 2:
+                print(
+                    f"[archive] rejected low-relevance result={identifier!r} "
+                    f"title={str(doc.get('title') or '')[:100]!r} matched={sorted(matched_terms)}",
+                    flush=True,
+                )
                 continue
             # Only use items whose metadata explicitly identifies a permissive/public-domain license.
             if not any(marker in license_url for marker in (
