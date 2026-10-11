@@ -131,6 +131,23 @@ def _gemini(topic: str, research: list[dict] | None = None) -> dict:
                     "rate limit", "temporarily", "timeout", "deadline",
                     "500 internal", "502", "504",
                 ))
+                # A short but valid JSON plan is recoverable: retry the same model
+                # with explicit per-beat word targets instead of immediately rotating away.
+                too_short = "narration words" in message or "usable beats" in message
+                if attempt == 0 and too_short:
+                    prompt += (
+                        "\\n\\nLENGTH REPAIR — your previous response was too short. "
+                        "Return a complete revised JSON plan, not a summary. Include 10-12 beats, "
+                        "each with about 150-190 words of narration, for at least 1,500 spoken words "
+                        "total. Keep claims tied to supplied research, retain exact source URLs, "
+                        "and do not pad with repeated ideas. Output JSON only."
+                    )
+                    print(
+                        f"[llm] Gemini model {model} returned a short plan; retrying with explicit length targets",
+                        flush=True,
+                    )
+                    time.sleep(1)
+                    continue
                 if attempt == 0 and transient:
                     print(
                         f"[llm] Gemini model {model} transient failure; retrying once: {exc}",
