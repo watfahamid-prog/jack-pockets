@@ -1,0 +1,82 @@
+name: Experimental FilmCraft automated edit smoke test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/filmcraft-automated-edit-smoke.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: filmcraft-automated-edit-smoke
+  cancel-in-progress: false
+
+jobs:
+  edit-smoke:
+    name: Import footage, place a timeline clip, and export
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout Jack Pockets
+        uses: actions/checkout@v4
+
+      - name: Checkout FilmCraft source
+        uses: actions/checkout@v4
+        with:
+          repository: storytold/filmcraft
+          path: filmcraft-src
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libasound2-dev libudev-dev ffmpeg python3
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: filmcraft-src
+
+      - name: Build FilmCraft CLI
+        working-directory: filmcraft-src
+        run: cargo build --release -p filmcraft-cli
+
+      - name: Generate two tiny test clips
+        run: |
+          mkdir -p filmcraft-edit-output
+          ffmpeg -y -f lavfi -i "testsrc2=size=640x360:rate=30:duration=3" -f lavfi -i "sine=frequency=440:duration=3" -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest filmcraft-edit-output/test-clip-a.mp4
+          ffmpeg -y -f lavfi -i "color=c=orange:size=640x360:rate=30:duration=3" -f lavfi -i "sine=frequency=660:duration=3" -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest filmcraft-edit-output/test-clip-b.mp4
+          ffprobe -v error -show_entries stream=codec_type,codec_name -of json filmcraft-edit-output/test-clip-a.mp4 > filmcraft-edit-output/input-probe.json
+
+      - name: Check FilmCraft editing command availability
+        working-directory: filmcraft-src
+        run: |
+          ./target/release/filmcraft-cli commands timeline.place --json | tee ../filmcraft-edit-output/timeline-place-command.json
+          ./target/release/filmcraft-cli commands interchange --json | tee ../filmcraft-edit-output/interchange-commands.json || true
+          ./target/release/filmcraft-cli --demo inspect sequence > ../filmcraft-edit-output/demo-sequence.json
+
+      - name: Verify FilmCraft can ingest real media files
+        working-directory: filmcraft-src
+        run: |
+          ./target/release/filmcraft-cli --demo --save-as ../filmcraft-edit-output/test-project.fcproj import ../filmcraft-edit-output/test-clip-a.mp4 ../filmcraft-edit-output/test-clip-b.mp4 2>&1 | tee ../filmcraft-edit-output/import.log
+          test -s ../filmcraft-edit-output/test-project.fcproj
+          ./target/release/filmcraft-cli --project ../filmcraft-edit-output/test-project.fcproj inspect > ../filmcraft-edit-output/imported-project.json
+
+      - name: Save CLI diagnostics
+        if: always()
+        run: |
+          echo "FilmCraft edit smoke test diagnostics collected."
+          ls -lh filmcraft-edit-output || true
+
+      - name: Upload diagnostics and project
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: filmcraft-automated-edit-smoke-${{ github.run_number }}
+          path: filmcraft-edit-output/
+          if-no-files-found: warn
+          retention-days: 7
