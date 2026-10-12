@@ -12,14 +12,12 @@ class EffectCraftBridgeTests(unittest.TestCase):
     def test_maps_local_video_and_narration_into_otio_tracks(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / "clip.mp4").write_bytes(b"video")
-            (root / "narration.mp3").write_bytes(b"audio")
             manifest = {
                 "title": "Example documentary",
                 "topic": "Example",
                 "duration": 8,
                 "fps": 30,
-                "audioSrc": "clip.mp3" if False else "runs/narration.mp3",
+                "audioSrc": "runs/narration.mp3",
                 "beats": [{
                     "start": 0,
                     "assets": [{"id": "v1", "kind": "video", "src": "runs/clip.mp4", "title": "Example shot"}],
