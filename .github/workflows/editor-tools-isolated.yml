@@ -2,6 +2,11 @@ name: Isolated FilmCraft and EffectCraft smoke tests
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - improve/filmcraft-visual-validation
+    paths:
+      - ".github/workflows/editor-tools-isolated.yml"
 
 permissions:
   contents: read
