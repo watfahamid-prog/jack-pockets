@@ -104,27 +104,88 @@ def _synthesize_elevenlabs(text: str, out: Path, api_key: str, voice_id: str) ->
     shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+
+def _synthesize_openai(text: str, out: Path) -> None:
+    """Generate narration with OpenAI TTS, chunking long scripts to API-safe lengths."""
+    from openai import OpenAI
+
+    client = OpenAI()
+    temp_dir = out.parent / f".{out.stem}-openai-tts"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    pieces = _chunks(text, limit=3500)
+    if not pieces:
+        raise RuntimeError("No narration text remained after chunking")
+    generated: list[Path] = []
+    try:
+        for index, piece in enumerate(pieces):
+            part = temp_dir / f"part-{index:03d}.mp3"
+            response = client.audio.speech.create(
+                model=os.getenv("OPENAI_TTS_MODEL", "gpt-4o-mini-tts"),
+                voice=os.getenv("OPENAI_TTS_VOICE", "alloy"),
+                input=piece,
+                response_format="mp3",
+            )
+            response.stream_to_file(str(part))
+            if not part.exists() or part.stat().st_size < 1000:
+                raise RuntimeError(f"OpenAI TTS returned an unexpectedly small audio chunk ({index + 1})")
+            generated.append(part)
+        if len(generated) == 1:
+            shutil.copyfile(generated[0], out)
+        else:
+            list_file = temp_dir / "concat.txt"
+            list_file.write_text(
+                "".join("file '" + str(path.resolve()).replace("'", "'\\''") + "'\\n" for path in generated),
+                encoding="utf-8",
+            )
+            subprocess.run(
+                ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(list_file),
+                 "-c:a", "libmp3lame", "-q:a", "2", str(out)],
+                check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            )
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def synthesize(text: str, out: Path) -> Path:
     if not text.strip():
         raise RuntimeError("TTS received empty narration text")
     out.parent.mkdir(parents=True, exist_ok=True)
 
+    errors: list[str] = []
     api_key = os.getenv("ELEVENLABS_API_KEY", "").strip()
     voice_id = os.getenv("ELEVENLABS_VOICE_ID", "").strip()
     if api_key and voice_id:
         try:
             _synthesize_elevenlabs(text, out, api_key, voice_id)
-            print(f"[tts] narration generated with ElevenLabs voice ID {voice_id}", flush=True)
+            print("[tts] narration generated with ElevenLabs", flush=True)
+            return out
         except Exception as exc:
-            raise RuntimeError(f"ElevenLabs narration failed: {exc}") from exc
-    else:
-        voice = os.getenv("TTS_VOICE") or DEFAULT_VOICE
-        try:
-            asyncio.run(_synthesize_edge(text, out, voice))
-        except Exception as exc:
-            raise RuntimeError(f"TTS generation failed using Edge TTS voice '{voice}': {exc}") from exc
-        print(f"[tts] ElevenLabs key/voice ID not both configured; using Edge TTS voice {voice}", flush=True)
+            errors.append(f"ElevenLabs: {exc}")
+            print(f"[tts] ElevenLabs failed; trying configured fallback: {exc}", flush=True)
+    elif api_key or voice_id:
+        errors.append("ElevenLabs: both ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID are required")
 
-    if not out.exists() or out.stat().st_size == 0:
-        raise RuntimeError("TTS returned no audio file")
-    return out
+    if os.getenv("OPENAI_API_KEY", "").strip():
+        try:
+            _synthesize_openai(text, out)
+            print(f"[tts] narration generated with OpenAI TTS ({os.getenv('OPENAI_TTS_MODEL', 'gpt-4o-mini-tts')})", flush=True)
+            return out
+        except Exception as exc:
+            errors.append(f"OpenAI TTS: {exc}")
+            print(f"[tts] OpenAI TTS failed; trying Edge TTS fallback: {exc}", flush=True)
+
+    voice = os.getenv("TTS_VOICE") or DEFAULT_VOICE
+    try:
+        asyncio.run(_synthesize_edge(text, out, voice))
+        if not out.exists() or out.stat().st_size == 0:
+            raise RuntimeError("provider returned no audio file")
+        print(f"[tts] narration generated with Edge TTS voice {voice}", flush=True)
+        return out
+    except Exception as exc:
+        errors.append(f"Edge TTS ({voice}): {exc}")
+
+    raise RuntimeError(
+        "All available narration providers failed. Configure a working ELEVENLABS_API_KEY + "
+        "ELEVENLABS_VOICE_ID or OPENAI_API_KEY, or restore Edge TTS connectivity. Details: "
+        + " | ".join(errors)
+    )
