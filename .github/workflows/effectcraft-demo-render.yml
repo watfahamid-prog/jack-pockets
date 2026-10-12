@@ -1,4 +1,4 @@
-name: Experimental EffectCraft demo render
+name: Experimental EffectCraft demo render and audio verification
 
 on:
   workflow_dispatch:
@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   demo-render:
-    name: Build and render EffectCraft demo (isolated)
+    name: Build demo, render with audio enabled, verify streams
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -31,9 +31,9 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config libasound2-dev libudev-dev ffmpeg
+          sudo apt-get install -y build-essential pkg-config libasound2-dev libudev-dev ffmpeg python3
 
-      - name: Install Rust 1.95+
+      - name: Install stable Rust
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust build
@@ -45,25 +45,40 @@ jobs:
         working-directory: effectcraft-src
         run: cargo build --release -p effectcraft-cli
 
-      - name: Render built-in demo
+      - name: Inspect audio and import commands
+        working-directory: effectcraft-src
+        run: |
+          mkdir -p ../effectcraft-demo-output
+          ./target/release/effectcraft-cli commands --filter file.import --json > ../effectcraft-demo-output/import-command.json
+          ./target/release/effectcraft-cli commands --filter comp.newCompFromSelection --json > ../effectcraft-demo-output/new-comp-command.json
+          ./target/release/effectcraft-cli commands --filter project.select --json > ../effectcraft-demo-output/select-command.json
+          ./target/release/effectcraft-cli --demo info > ../effectcraft-demo-output/demo-info.json
+
+      - name: Render built-in demo with audio explicitly enabled
         working-directory: effectcraft-src
         timeout-minutes: 15
         run: |
           mkdir -p ../effectcraft-demo-output
           set -o pipefail
-          ./target/release/effectcraft-cli render --out ../effectcraft-demo-output/effectcraft-demo.mp4 2>&1 | tee ../effectcraft-demo-output/render.log
+          ./target/release/effectcraft-cli render --out ../effectcraft-demo-output/effectcraft-demo.mp4 --audio on 2>&1 | tee ../effectcraft-demo-output/render.log
 
-      - name: Verify video and audio streams
-        if: always()
+      - name: Verify the demo has an audio stream
         run: |
           mkdir -p effectcraft-demo-output
-          if [ -f effectcraft-demo-output/effectcraft-demo.mp4 ]; then
-            ls -lh effectcraft-demo-output/effectcraft-demo.mp4
-            ffprobe -v error -show_entries format=duration,size:stream=codec_type,codec_name,width,height,sample_rate,channels -of json effectcraft-demo-output/effectcraft-demo.mp4 | tee effectcraft-demo-output/media-probe.json
-          else
-            echo "No MP4 was produced by EffectCraft."
-            exit 1
-          fi
+          test -s effectcraft-demo-output/effectcraft-demo.mp4
+          ffprobe -v error -show_entries format=duration,size:stream=codec_type,codec_name,width,height,sample_rate,channels -of json effectcraft-demo-output/effectcraft-demo.mp4 | tee effectcraft-demo-output/media-probe.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path("effectcraft-demo-output/media-probe.json").read_text())
+          streams = data.get("streams", [])
+          kinds = {s.get("codec_type") for s in streams}
+          if "video" not in kinds:
+              raise SystemExit("EffectCraft demo export has no video stream")
+          if "audio" not in kinds:
+              raise SystemExit("EffectCraft demo is silent even with --audio on; see command diagnostics artifact")
+          print("EffectCraft demo contains video and audio streams.")
+          PY
 
       - name: Upload demo and diagnostics
         if: always()
