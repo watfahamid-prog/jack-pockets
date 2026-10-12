@@ -6,6 +6,7 @@ on:
     paths:
       - "filmcraft_bridge.py"
       - "tests/test_filmcraft_bridge.py"
+      - "tests/validate_filmcraft_preview.py"
       - ".github/workflows/filmcraft-manifest-bridge.yml"
 
 permissions:
@@ -100,6 +101,9 @@ jobs:
               raise SystemExit(f"Expected approximately six seconds, got {duration}s")
           print(f"Verified bridge preview: {duration:.2f}s with video and audio.")
           PY
+
+      - name: Visual regression check (frame occupancy)
+        run: python3 tests/validate_filmcraft_preview.py filmcraft-bridge-output/filmcraft-manifest-preview.mp4 filmcraft-bridge-output/visual-qa.json
 
       - name: Upload bridge preview and diagnostics
         if: always()
