@@ -134,7 +134,7 @@ def _synthesize_openai(text: str, out: Path) -> None:
         else:
             list_file = temp_dir / "concat.txt"
             list_file.write_text(
-                "".join("file '" + str(path.resolve()).replace("'", "'\\''") + "'\\n" for path in generated),
+                "".join("file '" + str(path.resolve()).replace("'", "'\\''") + "'\n" for path in generated),
                 encoding="utf-8",
             )
             subprocess.run(
