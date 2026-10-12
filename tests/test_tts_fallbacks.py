@@ -37,7 +37,7 @@ class TTSFallbackTests(unittest.TestCase):
         self.assertGreater(self.out.stat().st_size, 1000)
 
     def test_edge_is_last_resort_when_openai_fails(self):
-        def write_audio(text, out):
+        async def write_audio(text, out, voice):
             Path(out).write_bytes(b"e" * 1200)
 
         with patch.object(tts, "_synthesize_elevenlabs", side_effect=RuntimeError("simulated outage")), \
