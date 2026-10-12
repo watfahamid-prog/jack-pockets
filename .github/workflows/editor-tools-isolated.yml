@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
+      - main
       - improve/filmcraft-visual-validation
     paths:
       - ".github/workflows/editor-tools-isolated.yml"
