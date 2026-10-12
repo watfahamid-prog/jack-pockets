@@ -7,6 +7,9 @@ on:
       - improve/filmcraft-visual-validation
     paths:
       - ".github/workflows/editor-tools-isolated.yml"
+  pull_request:
+    paths:
+      - ".github/workflows/editor-tools-isolated.yml"
 
 permissions:
   contents: read
