@@ -126,9 +126,31 @@ def build_plan(manifest: dict[str, Any], public_dir: Path, max_seconds: float) -
     }
 
 
+def fit_video_to_canvas(source_path: str, output_path: Path, width: int = 1920, height: int = 1080) -> Path:
+    """Prepare video for FilmCraft's fixed canvas so source clips fill the frame."""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    command = [
+        "ffmpeg", "-y", "-i", source_path,
+        "-vf", f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},setsar=1",
+        "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+        "-pix_fmt", "yuv420p", str(output_path),
+    ]
+    result = subprocess.run(command, text=True, capture_output=True, check=False)
+    if result.returncode or not output_path.is_file() or output_path.stat().st_size == 0:
+        raise RuntimeError(f"Could not prepare full-frame video {source_path}: {result.stderr or result.stdout}")
+    return output_path
+
+
 def execute_plan(plan: dict[str, Any], cli: str, output_dir: Path) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
-    source_paths = [item["path"] for item in plan["sources"]]
+    source_paths = []
+    for source in plan["sources"]:
+        path = source["path"]
+        if source["kind"] == "video":
+            prepared = output_dir / "prepared-media" / f"{source['id']}.mp4"
+            source_paths.append(str(fit_video_to_canvas(path, prepared)))
+        else:
+            source_paths.append(path)
     if not source_paths:
         raise ValueError("No media sources to import")
     project = (output_dir / "filmcraft-project.fcproj").resolve()
