@@ -10,7 +10,7 @@ on:
         description: "Branch or commit containing the narration fallback code"
         required: true
         type: string
-        default: "fix/generation-tts-fallbacks"
+        default: "fix/free-piper-narration-fallback"
 
 permissions:
   contents: read
@@ -26,7 +26,7 @@ jobs:
       - name: Checkout narration code under test
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.code_ref || 'fix/generation-tts-fallbacks' }}
+          ref: ${{ inputs.code_ref || 'fix/free-piper-narration-fallback' }}
           path: candidate
 
       - name: Set up Python
@@ -39,7 +39,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg
           python -m pip install --upgrade pip
-          python -m pip install edge-tts requests python-dotenv openai
+          python -m pip install edge-tts requests python-dotenv openai piper-tts
 
       - name: Discover an available ElevenLabs voice when no voice ID is configured
         id: discover_voice
