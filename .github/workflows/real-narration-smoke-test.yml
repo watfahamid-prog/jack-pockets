@@ -1,6 +1,9 @@
 name: Real narration smoke test
 
 on:
+  push:
+    paths:
+      - ".github/workflows/real-narration-smoke-test.yml"
   workflow_dispatch:
     inputs:
       code_ref:
@@ -23,7 +26,7 @@ jobs:
       - name: Checkout narration code under test
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.code_ref }}
+          ref: ${{ inputs.code_ref || 'fix/generation-tts-fallbacks' }}
           path: candidate
 
       - name: Set up Python
