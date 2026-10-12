@@ -42,6 +42,7 @@ jobs:
           python -m pip install edge-tts requests python-dotenv openai
 
       - name: Discover an available ElevenLabs voice when no voice ID is configured
+        id: discover_voice
         env:
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
           ELEVENLABS_VOICE_ID: ${{ secrets.ELEVENLABS_VOICE_ID }}
@@ -80,7 +81,7 @@ jobs:
         working-directory: candidate
         env:
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
-          ELEVENLABS_VOICE_ID: ${{ secrets.ELEVENLABS_VOICE_ID }}
+          ELEVENLABS_VOICE_ID: ${{ secrets.ELEVENLABS_VOICE_ID || steps.discover_voice.outputs.voice_id }}
           ELEVENLABS_MODEL_ID: eleven_multilingual_v2
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_TTS_MODEL: gpt-4o-mini-tts
