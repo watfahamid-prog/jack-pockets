@@ -1,13 +1,30 @@
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from filmcraft_bridge import build_plan
+from filmcraft_bridge import build_plan, fit_video_to_canvas
 
 
 class FilmCraftBridgeTests(unittest.TestCase):
+    def test_video_preparation_fills_16_by_9_canvas(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "prepared.mp4"
+
+            def fake_ffmpeg(command, **kwargs):
+                output.write_bytes(b"prepared video")
+                self.assertIn("scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,setsar=1", command)
+                self.assertIn("-an", command)
+                return type("Completed", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+            with patch("filmcraft_bridge.subprocess.run", side_effect=fake_ffmpeg):
+                result = fit_video_to_canvas("/tmp/source.mp4", output)
+
+            self.assertEqual(result, output)
+            self.assertGreater(output.stat().st_size, 0)
+
     def test_maps_local_video_shots_and_narration(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
