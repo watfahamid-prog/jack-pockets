@@ -126,6 +126,30 @@ def build_plan(manifest: dict[str, Any], public_dir: Path, max_seconds: float) -
     }
 
 
+def scale_video_clips_to_sequence(project_path: Path) -> int:
+    """Scale imported timeline video clips to the sequence canvas before export.
+
+    FilmCraft otherwise preserves 640x360 source dimensions in its 1920x1080
+    default sequence, producing a small centered picture surrounded by black.
+    """
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    items = project.get("project", {}).get("items", {})
+    updated = 0
+    for item in items.values():
+        sequence = item.get("kind", {}).get("Sequence")
+        if not isinstance(sequence, dict):
+            continue
+        for track in sequence.get("video_tracks", []):
+            for clip in track.get("items", []):
+                if clip.get("enabled", True) and clip.get("scale_to_frame") is not True:
+                    clip["scale_to_frame"] = True
+                    updated += 1
+    if updated == 0:
+        raise RuntimeError("No enabled video clips found to scale to the sequence frame")
+    project_path.write_text(json.dumps(project, indent=2), encoding="utf-8")
+    return updated
+
+
 def execute_plan(plan: dict[str, Any], cli: str, output_dir: Path) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     source_paths = [item["path"] for item in plan["sources"]]
@@ -168,6 +192,12 @@ def execute_plan(plan: dict[str, Any], cli: str, output_dir: Path) -> Path:
         (output_dir / "placements.json").write_text(json.dumps(results, indent=2), encoding="utf-8")
         if result.returncode:
             raise RuntimeError(f"FilmCraft timeline placement failed: {result.stderr or result.stdout}")
+
+    scaled = scale_video_clips_to_sequence(project)
+    (output_dir / "scale-to-frame.json").write_text(
+        json.dumps({"enabled_video_clips_scaled_to_sequence": scaled}, indent=2),
+        encoding="utf-8",
+    )
 
     export_path = (output_dir / "filmcraft-manifest-preview.mp4").resolve()
     result = subprocess.run(
