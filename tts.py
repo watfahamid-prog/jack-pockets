@@ -146,6 +146,46 @@ def _synthesize_openai(text: str, out: Path) -> None:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+
+def _synthesize_piper(text: str, out: Path) -> None:
+    """Generate narration locally with Piper when all cloud/network providers fail."""
+    executable = shutil.which("piper")
+    if not executable:
+        raise RuntimeError("Piper executable is not installed")
+    model = os.getenv("PIPER_MODEL", "en_US-libritts_r-medium").strip()
+    temp_dir = out.parent / f".{out.stem}-piper"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    wav = temp_dir / "narration.wav"
+    try:
+        completed = subprocess.run(
+            [executable, "--model", model, "--output_file", str(wav)],
+            input=text,
+            text=True,
+            capture_output=True,
+            timeout=int(os.getenv("PIPER_TIMEOUT_SECONDS", "600")),
+            check=False,
+        )
+        if completed.returncode != 0:
+            details = (completed.stderr or completed.stdout or "no diagnostic output")[-1200:]
+            raise RuntimeError(f"Piper exited with code {completed.returncode}: {details}")
+        if not wav.exists() or wav.stat().st_size < 1000:
+            raise RuntimeError("Piper did not create a usable WAV file")
+        if out.suffix.lower() == ".wav":
+            shutil.copyfile(wav, out)
+        else:
+            subprocess.run(
+                ["ffmpeg", "-y", "-v", "error", "-i", str(wav), "-codec:a", "libmp3lame", "-q:a", "2", str(out)],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=120,
+            )
+        if not out.exists() or out.stat().st_size < 1000:
+            raise RuntimeError("Piper output conversion produced no usable audio")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def synthesize(text: str, out: Path) -> Path:
     if not text.strip():
         raise RuntimeError("TTS received empty narration text")
@@ -184,8 +224,15 @@ def synthesize(text: str, out: Path) -> Path:
     except Exception as exc:
         errors.append(f"Edge TTS ({voice}): {exc}")
 
+    try:
+        _synthesize_piper(text, out)
+        print(f"[tts] narration generated locally with Piper ({os.getenv('PIPER_MODEL', 'en_US-libritts_r-medium')})", flush=True)
+        return out
+    except Exception as exc:
+        errors.append(f"Piper: {exc}")
+
     raise RuntimeError(
-        "All available narration providers failed. Configure a working ELEVENLABS_API_KEY + "
-        "ELEVENLABS_VOICE_ID or OPENAI_API_KEY, or restore Edge TTS connectivity. Details: "
+        "All available narration providers failed. Configure a working ElevenLabs/OpenAI provider, "
+        "restore Edge TTS connectivity, or ensure Piper and its voice model are available. Details: "
         + " | ".join(errors)
     )
