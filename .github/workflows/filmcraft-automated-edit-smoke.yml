@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   edit-smoke:
-    name: Import footage, place a timeline clip, and export
+    name: Import footage, place clips, export and verify audio
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -59,20 +59,82 @@ jobs:
           ./target/release/filmcraft-cli commands interchange --json | tee ../filmcraft-edit-output/interchange-commands.json || true
           ./target/release/filmcraft-cli --demo inspect sequence > ../filmcraft-edit-output/demo-sequence.json
 
-      - name: Verify FilmCraft can ingest real media files
+      - name: Import media into a project
         working-directory: filmcraft-src
         run: |
-          ./target/release/filmcraft-cli --demo --save-as ../filmcraft-edit-output/test-project.fcproj import ../filmcraft-edit-output/test-clip-a.mp4 ../filmcraft-edit-output/test-clip-b.mp4 2>&1 | tee ../filmcraft-edit-output/import.log
+          set -o pipefail
+          ./target/release/filmcraft-cli --demo --save-as ../filmcraft-edit-output/test-project.fcproj import ../filmcraft-edit-output/test-clip-a.mp4 ../filmcraft-edit-output/test-clip-b.mp4 2> ../filmcraft-edit-output/import.log | tee ../filmcraft-edit-output/import-result.json
           test -s ../filmcraft-edit-output/test-project.fcproj
           ./target/release/filmcraft-cli --project ../filmcraft-edit-output/test-project.fcproj inspect > ../filmcraft-edit-output/imported-project.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path("../filmcraft-edit-output/import-result.json")
+          data = json.loads(p.read_text())
+          ids = data.get("items", [])
+          if data.get("errors") or len(ids) < 2:
+              raise SystemExit(f"Expected two imported media items, got: {data}")
+          Path("../filmcraft-edit-output/media-item-ids.json").write_text(json.dumps(ids))
+          print(f"Imported media item IDs: {ids}")
+          PY
 
-      - name: Save CLI diagnostics
+      - name: Place both clips on the timeline
+        working-directory: filmcraft-src
+        run: |
+          python3 - <<'PY'
+          import json, subprocess
+          from pathlib import Path
+          cli = "./target/release/filmcraft-cli"
+          out = Path("../filmcraft-edit-output")
+          ids = json.loads((out / "media-item-ids.json").read_text())
+          project = str(out / "test-project.fcproj")
+          results = []
+          for item, start in zip(ids[:2], [0, 3]):
+              params = {"item": item, "track": "V1", "seconds": start, "duration": 3, "video": True, "audio": True}
+              p = subprocess.run([cli, "--project", project, "exec", "timeline.place", json.dumps(params), "--save"],
+                                 text=True, capture_output=True)
+              record = {"item": item, "start_seconds": start, "returncode": p.returncode,
+                        "stdout": p.stdout, "stderr": p.stderr, "params": params}
+              results.append(record)
+              if p.returncode != 0:
+                  (out / "timeline-placement.json").write_text(json.dumps(results, indent=2))
+                  raise SystemExit(f"timeline.place failed for item {item}: {p.stderr or p.stdout}")
+          (out / "timeline-placement.json").write_text(json.dumps(results, indent=2))
+          print(json.dumps(results, indent=2))
+          PY
+          ./target/release/filmcraft-cli --project ../filmcraft-edit-output/test-project.fcproj inspect sequence > ../filmcraft-edit-output/edited-sequence.json
+
+      - name: Export the six-second edited sequence
+        working-directory: filmcraft-src
+        timeout-minutes: 15
+        run: |
+          set -o pipefail
+          ./target/release/filmcraft-cli --project ../filmcraft-edit-output/test-project.fcproj export ../filmcraft-edit-output/filmcraft-edited-test.mp4 --start 0 --end 6 2>&1 | tee ../filmcraft-edit-output/export.log
+          test -s ../filmcraft-edit-output/filmcraft-edited-test.mp4
+          ffprobe -v error -show_entries format=duration,size:stream=codec_type,codec_name,width,height,sample_rate,channels -of json ../filmcraft-edit-output/filmcraft-edited-test.mp4 | tee ../filmcraft-edit-output/export-probe.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p = json.loads(Path("../filmcraft-edit-output/export-probe.json").read_text())
+          streams = p.get("streams", [])
+          kinds = {s.get("codec_type") for s in streams}
+          duration = float(p.get("format", {}).get("duration", 0))
+          if "video" not in kinds:
+              raise SystemExit("FilmCraft export has no video stream")
+          if "audio" not in kinds:
+              raise SystemExit("FilmCraft export is silent; expected audio from the two test clips")
+          if not 5.5 <= duration <= 7.0:
+              raise SystemExit(f"Unexpected exported duration: {duration}s")
+          print(f"Verified edited export: {duration:.2f}s with video and audio.")
+          PY
+
+      - name: Save diagnostics
         if: always()
         run: |
-          echo "FilmCraft edit smoke test diagnostics collected."
+          echo "FilmCraft automated edit test diagnostics:"
           ls -lh filmcraft-edit-output || true
 
-      - name: Upload diagnostics and project
+      - name: Upload edited video, project and diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
