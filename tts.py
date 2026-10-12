@@ -148,17 +148,33 @@ def _synthesize_openai(text: str, out: Path) -> None:
 
 
 def _synthesize_piper(text: str, out: Path) -> None:
-    """Generate narration locally with Piper when all cloud/network providers fail."""
+    """Generate narration locally with Piper, downloading its open voice model if needed."""
     executable = shutil.which("piper")
     if not executable:
         raise RuntimeError("Piper executable is not installed")
-    model = os.getenv("PIPER_MODEL", "en_US-libritts_r-medium").strip()
+
+    model = os.getenv("PIPER_MODEL", "en_US-lessac-medium").strip()
+    data_dir = Path(os.getenv("PIPER_DATA_DIR", str(Path.home() / ".cache" / "jack-pockets" / "piper")))
+    data_dir.mkdir(parents=True, exist_ok=True)
+    model_path = data_dir / f"{model}.onnx"
+    if not model_path.exists():
+        download = subprocess.run(
+            [os.sys.executable, "-m", "piper.download_voices", "--data-dir", str(data_dir), model],
+            text=True,
+            capture_output=True,
+            timeout=int(os.getenv("PIPER_DOWNLOAD_TIMEOUT_SECONDS", "300")),
+            check=False,
+        )
+        if download.returncode != 0 or not model_path.exists():
+            details = (download.stderr or download.stdout or "voice download did not create a model")[-1200:]
+            raise RuntimeError(f"Could not download Piper voice '{model}': {details}")
+
     temp_dir = out.parent / f".{out.stem}-piper"
     temp_dir.mkdir(parents=True, exist_ok=True)
     wav = temp_dir / "narration.wav"
     try:
         completed = subprocess.run(
-            [executable, "--model", model, "--output_file", str(wav)],
+            [executable, "--model", str(model_path), "--output_file", str(wav)],
             input=text,
             text=True,
             capture_output=True,
@@ -184,7 +200,6 @@ def _synthesize_piper(text: str, out: Path) -> None:
             raise RuntimeError("Piper output conversion produced no usable audio")
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
-
 
 def synthesize(text: str, out: Path) -> Path:
     if not text.strip():
