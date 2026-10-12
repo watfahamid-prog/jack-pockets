@@ -10,7 +10,7 @@ on:
         description: "Branch or commit containing the narration fallback code"
         required: true
         type: string
-        default: "fix/free-piper-narration-fallback"
+        default: "main"
 
 permissions:
   contents: read
@@ -26,7 +26,7 @@ jobs:
       - name: Checkout narration code under test
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.code_ref || 'fix/free-piper-narration-fallback' }}
+          ref: ${{ inputs.code_ref || github.sha }}
           path: candidate
 
       - name: Set up Python
