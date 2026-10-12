@@ -73,7 +73,7 @@ jobs:
               next((v for v in voices if v.get("category") == "premade"), voices[0]),
           )
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output_file:
-              output_file.write(f"voice_id={chosen['voice_id']}\\n")
+              output_file.write("voice_id=" + chosen["voice_id"] + "\n")
           print(f"Using available ElevenLabs voice for this test: {chosen.get('name', 'unnamed')}")
           PY
 
