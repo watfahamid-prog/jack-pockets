@@ -47,6 +47,21 @@ class TTSFallbackTests(unittest.TestCase):
         self.assertEqual(result, self.out)
         self.assertGreater(self.out.stat().st_size, 1000)
 
+    def test_piper_is_used_when_cloud_and_edge_providers_fail(self):
+        async def fail_edge(text, out, voice):
+            raise RuntimeError("edge blocked")
+
+        def write_piper(text, out):
+            Path(out).write_bytes(b"p" * 1500)
+
+        with patch.object(tts, "_synthesize_elevenlabs", side_effect=RuntimeError("quota exceeded")), \\
+             patch.object(tts, "_synthesize_openai", side_effect=RuntimeError("no API credits")), \\
+             patch.object(tts, "_synthesize_edge", side_effect=fail_edge), \\
+             patch.object(tts, "_synthesize_piper", side_effect=write_piper):
+            result = tts.synthesize("A documentary narration.", self.out)
+        self.assertEqual(result, self.out)
+        self.assertGreater(self.out.stat().st_size, 1000)
+
     def test_clear_error_when_all_providers_fail(self):
         with patch.object(tts, "_synthesize_elevenlabs", side_effect=RuntimeError("eleven down")), \
              patch.object(tts, "_synthesize_openai", side_effect=RuntimeError("openai down")), \
