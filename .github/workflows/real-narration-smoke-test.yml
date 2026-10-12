@@ -41,6 +41,41 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install edge-tts requests python-dotenv openai
 
+      - name: Discover an available ElevenLabs voice when no voice ID is configured
+        env:
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          ELEVENLABS_VOICE_ID: ${{ secrets.ELEVENLABS_VOICE_ID }}
+        run: |
+          if [ -z "$ELEVENLABS_API_KEY" ] || [ -n "$ELEVENLABS_VOICE_ID" ]; then
+            echo "Skipping voice discovery (key missing or voice ID already configured)."
+            exit 0
+          fi
+          python - <<'PY'
+          import os
+          import requests
+
+          key = os.environ["ELEVENLABS_API_KEY"].strip()
+          response = requests.get(
+              "https://api.elevenlabs.io/v1/voices",
+              headers={"xi-api-key": key},
+              timeout=30,
+          )
+          if not response.ok:
+              print(f"ElevenLabs voice discovery unavailable: HTTP {response.status_code}")
+              raise SystemExit(0)
+          voices = response.json().get("voices", [])
+          if not voices:
+              print("ElevenLabs returned no available voices.")
+              raise SystemExit(0)
+          chosen = next(
+              (v for v in voices if v.get("name", "").lower() == "rachel"),
+              next((v for v in voices if v.get("category") == "premade"), voices[0]),
+          )
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
+              env_file.write(f"ELEVENLABS_VOICE_ID={chosen['voice_id']}\n")
+          print(f"Using available ElevenLabs voice for this test: {chosen.get('name', 'unnamed')}")
+          PY
+
       - name: Generate and validate a short real narration sample
         working-directory: candidate
         env:
