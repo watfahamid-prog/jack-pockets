@@ -35,6 +35,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install FFmpeg and Python dependencies
+        # Piper downloads the selected voice model automatically during the test if not cached.
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg
