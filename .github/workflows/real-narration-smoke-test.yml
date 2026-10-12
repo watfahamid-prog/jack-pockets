@@ -1,0 +1,87 @@
+name: Real narration smoke test
+
+on:
+  workflow_dispatch:
+    inputs:
+      code_ref:
+        description: "Branch or commit containing the narration fallback code"
+        required: true
+        type: string
+        default: "fix/generation-tts-fallbacks"
+
+permissions:
+  contents: read
+
+jobs:
+  narration-smoke-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout workflow
+        uses: actions/checkout@v4
+
+      - name: Checkout narration code under test
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.code_ref }}
+          path: candidate
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install FFmpeg and Python dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          python -m pip install --upgrade pip
+          python -m pip install edge-tts requests python-dotenv openai
+
+      - name: Generate and validate a short real narration sample
+        working-directory: candidate
+        env:
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          ELEVENLABS_VOICE_ID: ${{ secrets.ELEVENLABS_VOICE_ID }}
+          ELEVENLABS_MODEL_ID: eleven_multilingual_v2
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_TTS_MODEL: gpt-4o-mini-tts
+          OPENAI_TTS_VOICE: alloy
+          TTS_VOICE: en-US-GuyNeural
+        run: |
+          python - <<'PY'
+          import subprocess
+          from pathlib import Path
+          import tts
+
+          out = Path("narration-smoke-test.mp3")
+          sample = (
+              "In nineteen ninety-seven, one small routing mistake showed "
+              "how a single network announcement could disrupt internet traffic."
+          )
+          result = tts.synthesize(sample, out)
+          if not result.exists() or result.stat().st_size < 1000:
+              raise SystemExit("Narration output is missing or unexpectedly small")
+          probe = subprocess.run(
+              ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+               "-of", "default=noprint_wrappers=1:nokey=1", str(out)],
+              check=True, capture_output=True, text=True,
+          )
+          duration = float(probe.stdout.strip())
+          if not 1.0 <= duration <= 30.0:
+              raise SystemExit(f"Unexpected narration duration: {duration:.2f}s")
+          subprocess.run(
+              ["ffmpeg", "-v", "error", "-i", str(out), "-f", "null", "-"],
+              check=True,
+          )
+          print(f"REAL_NARRATION_SMOKE_TEST_OK bytes={out.stat().st_size} duration={duration:.2f}s")
+          PY
+
+      - name: Upload narration sample
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-narration-smoke-test
+          path: candidate/narration-smoke-test.mp3
+          if-no-files-found: warn
+          retention-days: 7
