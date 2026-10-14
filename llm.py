@@ -206,6 +206,11 @@ def generate(topic: str, research: list[dict] | None = None) -> dict:
         "topic": topic.strip(),
         "research": research or [],
         "provider_order": order,
+        "configured_providers": {
+            "gemini": bool(os.getenv("GEMINI_API_KEY", "").strip()),
+            "openai": bool(os.getenv("OPENAI_API_KEY", "").strip()),
+            "anthropic": bool(os.getenv("ANTHROPIC_API_KEY", "").strip()),
+        },
         "models": {
             "gemini": os.getenv("GEMINI_MODEL", "gemini-3.8-flash"),
             "gemini_fallbacks": os.getenv("GEMINI_FALLBACK_MODELS", "gemini-3.6-flash,gemini-3.5-flash-lite"),
