@@ -1,6 +1,6 @@
 import unittest
 
-from generate import _asset_relevance, _relevant_sources
+from relevance import _asset_relevance, _relevant_sources
 
 
 class AssetRelevanceTests(unittest.TestCase):
