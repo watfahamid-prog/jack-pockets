@@ -13,7 +13,6 @@ CACHE_VERSION = 1
 def cache_root() -> Path:
     configured = os.getenv("JACKPOCKETS_CACHE_DIR", "").strip()
     root = Path(configured).expanduser() if configured else Path.home() / ".cache" / "jack-pockets"
-    root.mkdir(parents=True, exist_ok=True)
     return root
 
 
@@ -53,9 +52,9 @@ def save_json_cache(namespace: str, payload: Any, value: Any) -> None:
     if os.getenv("JACKPOCKETS_DISABLE_CACHE", "").lower() in {"1", "true", "yes"}:
         return
     path = cache_root() / "json" / namespace / (cache_key(namespace, payload) + ".json")
-    path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".tmp")
     try:
+        path.parent.mkdir(parents=True, exist_ok=True)
         temporary.write_text(
             json.dumps({"created_at": time.time(), "value": value}, ensure_ascii=False),
             encoding="utf-8",
