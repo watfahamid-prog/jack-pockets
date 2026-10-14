@@ -201,10 +201,55 @@ def _synthesize_piper(text: str, out: Path) -> None:
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
+def _audio_cache_path(text: str) -> Path:
+    # Never include API keys in cache paths. Include provider configuration so a newly
+    # configured premium voice does not accidentally reuse an older fallback voice.
+    import hashlib
+    import json
+
+    identity = {
+        "text": text,
+        "elevenlabs_voice": os.getenv("ELEVENLABS_VOICE_ID", ""),
+        "elevenlabs_model": os.getenv("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2"),
+        "openai_model": os.getenv("OPENAI_TTS_MODEL", "gpt-4o-mini-tts"),
+        "openai_voice": os.getenv("OPENAI_TTS_VOICE", "alloy"),
+        "edge_voice": os.getenv("TTS_VOICE", DEFAULT_VOICE),
+        "elevenlabs_available": bool(os.getenv("ELEVENLABS_API_KEY", "").strip()),
+        "openai_available": bool(os.getenv("OPENAI_API_KEY", "").strip()),
+    }
+    digest = hashlib.sha256(json.dumps(identity, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+    configured = os.getenv("JACKPOCKETS_CACHE_DIR", "").strip()
+    root = Path(configured).expanduser() if configured else Path.home() / ".cache" / "jack-pockets"
+    return root / "audio" / f"{digest}.mp3"
+
+
+def _save_audio_cache(out: Path, text: str) -> None:
+    if os.getenv("JACKPOCKETS_DISABLE_CACHE", "").lower() in {"1", "true", "yes"}:
+        return
+    try:
+        cached = _audio_cache_path(text)
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        temporary = cached.with_suffix(".tmp")
+        shutil.copyfile(out, temporary)
+        temporary.replace(cached)
+    except OSError as exc:
+        print(f"[cache] unable to save narration audio cache: {exc}", flush=True)
+
+
 def synthesize(text: str, out: Path) -> Path:
     if not text.strip():
         raise RuntimeError("TTS received empty narration text")
     out.parent.mkdir(parents=True, exist_ok=True)
+
+    if os.getenv("JACKPOCKETS_DISABLE_CACHE", "").lower() not in {"1", "true", "yes"}:
+        cached_audio = _audio_cache_path(text)
+        try:
+            if cached_audio.exists() and cached_audio.stat().st_size > 1000:
+                shutil.copyfile(cached_audio, out)
+                print("[tts] reused cached narration audio", flush=True)
+                return out
+        except OSError as exc:
+            print(f"[cache] narration cache read skipped: {exc}", flush=True)
 
     errors: list[str] = []
     api_key = os.getenv("ELEVENLABS_API_KEY", "").strip()
@@ -212,6 +257,7 @@ def synthesize(text: str, out: Path) -> Path:
     if api_key and voice_id:
         try:
             _synthesize_elevenlabs(text, out, api_key, voice_id)
+            _save_audio_cache(out, text)
             print("[tts] narration generated with ElevenLabs", flush=True)
             return out
         except Exception as exc:
@@ -223,6 +269,7 @@ def synthesize(text: str, out: Path) -> Path:
     if os.getenv("OPENAI_API_KEY", "").strip():
         try:
             _synthesize_openai(text, out)
+            _save_audio_cache(out, text)
             print(f"[tts] narration generated with OpenAI TTS ({os.getenv('OPENAI_TTS_MODEL', 'gpt-4o-mini-tts')})", flush=True)
             return out
         except Exception as exc:
@@ -234,6 +281,7 @@ def synthesize(text: str, out: Path) -> Path:
         asyncio.run(_synthesize_edge(text, out, voice))
         if not out.exists() or out.stat().st_size == 0:
             raise RuntimeError("provider returned no audio file")
+        _save_audio_cache(out, text)
         print(f"[tts] narration generated with Edge TTS voice {voice}", flush=True)
         return out
     except Exception as exc:
@@ -241,6 +289,7 @@ def synthesize(text: str, out: Path) -> Path:
 
     try:
         _synthesize_piper(text, out)
+        _save_audio_cache(out, text)
         print(f"[tts] narration generated locally with Piper ({os.getenv('PIPER_MODEL', 'en_US-libritts_r-medium')})", flush=True)
         return out
     except Exception as exc:
