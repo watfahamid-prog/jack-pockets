@@ -171,7 +171,7 @@ def main() -> None:
             raw_keywords = re.split(r"[,;|]", raw_keywords)
         beat_keywords = [str(x).strip() for x in raw_keywords if str(x).strip()]
         narration_text = str(beat.get("narration", "")).strip()
-        first_sentence = re.split(r"(?<=[.!?])\\s+", narration_text)[0][:180]
+        first_sentence = re.split(r"(?<=[.!?])\s+", narration_text)[0][:180]
         # Model outputs sometimes put a whole SEO phrase in one keyword field.
         # Flatten it and keep searches short enough for stock libraries to understand.
         keyword_tokens = []
