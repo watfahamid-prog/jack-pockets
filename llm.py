@@ -198,17 +198,44 @@ def _anthropic(topic: str, research: list[dict] | None = None) -> dict:
     return _normalize_plan(_parse_json(response.content[0].text), topic)
 
 def generate(topic: str, research: list[dict] | None = None) -> dict:
+    from cache_utils import load_json_cache, save_json_cache
+
     provider = os.getenv("LLM_PROVIDER", "auto").lower()
     order = {"gemini": ["gemini"], "openai": ["openai"], "anthropic": ["anthropic"], "auto": ["gemini", "openai", "anthropic"]}.get(provider, ["gemini", "openai", "anthropic"])
+    cache_payload = {
+        "topic": topic.strip(),
+        "research": research or [],
+        "provider_order": order,
+        "models": {
+            "gemini": os.getenv("GEMINI_MODEL", "gemini-3.8-flash"),
+            "gemini_fallbacks": os.getenv("GEMINI_FALLBACK_MODELS", "gemini-3.6-flash,gemini-3.5-flash-lite"),
+            "openai": os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+            "anthropic": os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5-5"),
+        },
+        "editorial_prompt_version": 2,
+    }
+    cached = load_json_cache("documentary-plan", cache_payload)
+    if isinstance(cached, dict):
+        try:
+            valid_cached = _normalize_plan(cached, topic)
+            print("[llm] reused cached documentary plan; set JACKPOCKETS_DISABLE_CACHE=1 to force a fresh draft", flush=True)
+            return valid_cached
+        except Exception as exc:
+            print(f"[llm] ignoring invalid cached plan: {exc}", flush=True)
+
     attempted = []
     for name in order:
         try:
             if name == "gemini" and os.getenv("GEMINI_API_KEY"):
-                return _gemini(topic, research)
-            if name == "openai" and os.getenv("OPENAI_API_KEY"):
-                return _openai(topic, research)
-            if name == "anthropic" and os.getenv("ANTHROPIC_API_KEY"):
-                return _anthropic(topic, research)
+                plan = _gemini(topic, research)
+            elif name == "openai" and os.getenv("OPENAI_API_KEY"):
+                plan = _openai(topic, research)
+            elif name == "anthropic" and os.getenv("ANTHROPIC_API_KEY"):
+                plan = _anthropic(topic, research)
+            else:
+                continue
+            save_json_cache("documentary-plan", cache_payload, plan)
+            return plan
         except Exception as exc:
             attempted.append(f"{name}: {exc}")
             print(f"[llm] {name} failed: {exc}", flush=True)
