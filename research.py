@@ -4,6 +4,8 @@ import os
 import re
 import requests
 
+from cache_utils import load_json_cache, save_json_cache
+
 HEADERS = {
     "User-Agent": "JackPocketsDocumentary/1.0 (research and source attribution; https://github.com/watfahamid-prog/jack-pockets)"
 }
@@ -123,8 +125,13 @@ def _wikipedia(query: str, limit: int) -> list[dict]:
     return results
 
 def search_web(query: str, limit: int = 6) -> list[dict]:
-    """Collect multiple source types; Wikipedia supplies context, not final verification."""
+    """Collect multiple source types; cache successful searches to reduce quota and repeat traffic."""
     limit = max(1, min(int(limit), 10))
+    cache_payload = {"query": " ".join(query.lower().split()), "limit": limit, "tavily_enabled": bool(os.getenv("TAVILY_API_KEY", "").strip())}
+    cached = load_json_cache("research-search", cache_payload)
+    if isinstance(cached, list) and cached:
+        print(f"[research] cache hit for query={query[:100]!r} results={len(cached)}", flush=True)
+        return cached
     results = []
 
     try:
@@ -161,4 +168,6 @@ def search_web(query: str, limit: int = 6) -> list[dict]:
         unique.append(item)
         if len(unique) >= limit:
             break
+    if unique:
+        save_json_cache("research-search", cache_payload, unique)
     return unique
