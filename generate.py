@@ -10,6 +10,7 @@ from pathlib import Path
 from assets import generate_role_asset, make_asset_plan, search_pexels, search_pexels_videos, search_pixabay, search_pixabay_videos, search_commons_videos, search_commons_photos, search_archive_videos
 from llm import generate
 from manifest import build
+from relevance import _asset_relevance, _relevant_sources
 from music import get_music
 from quality import validate
 from research import search_web
@@ -25,69 +26,6 @@ def slug(value: str) -> str:
 
 def public_path(path: Path) -> str:
     return str(path.relative_to("public")).replace("\\", "/")
-
-
-def _asset_relevance(query: str, beat: dict, asset: dict) -> tuple[bool, list[str]]:
-    """Match stock media to the beat's actual visual subject, not a long narration prompt."""
-    stopwords = {
-        "the", "and", "for", "with", "from", "into", "onto", "over", "under",
-        "about", "after", "again", "also", "because", "been", "before", "being",
-        "could", "did", "does", "during", "have", "more", "most", "other", "same",
-        "some", "such", "than", "that", "their", "them", "then", "there", "these",
-        "they", "this", "those", "through", "very", "what", "when", "where", "which",
-        "while", "would", "your", "you", "are", "was", "were", "has", "had", "its",
-        "documentary", "story", "mistake", "forever", "bizarre", "internet",
-        "footage", "video", "shot", "scene", "show", "showing", "clip", "visualization",
-        "animation", "visual", "moment", "opens", "exposed",
-    }
-    # Use compact editorial metadata; long narration strings contain incidental words.
-    target_text = " ".join([
-        str(beat.get("title", "")),
-        " ".join(str(x) for x in beat.get("keywords", [])),
-    ])
-    target = {
-        token for token in re.findall(r"[a-z0-9]{3,}", target_text.lower())
-        if token not in stopwords and not token.isdigit()
-    }
-    metadata = " ".join(str(asset.get(key, "")) for key in (
-        "title", "description", "tags",
-    )).lower().replace("-", " ").replace("_", " ")
-    found = sorted(term for term in target if term in metadata)
-    # A strong match on one specific term beats unrelated generic filler.
-    required = 2 if len(target) >= 5 else 1
-    return len(found) >= required, found
-
-def _relevant_sources(topic: str, beat: dict, sources: list[dict], limit: int = 3) -> list[str]:
-    """Return only sources whose title/content overlaps the actual beat subject."""
-    stopwords = {
-        "about", "after", "again", "also", "because", "been", "before", "being",
-        "could", "did", "does", "during", "from", "have", "into", "more", "most",
-        "other", "over", "same", "some", "such", "than", "that", "their", "them",
-        "then", "there", "these", "they", "this", "those", "through", "under",
-        "very", "what", "when", "where", "which", "while", "with", "would",
-        "documentary", "story", "mistake", "forever", "bizarre", "internet",
-    }
-    subject = f"{topic} {beat.get('title', '')} {str(beat.get('narration', ''))[:260]}"
-    terms = {
-        token for token in re.findall(r"[a-z0-9]{3,}", subject.lower())
-        if token not in stopwords and not token.isdigit()
-    }
-    ranked = []
-    for item in sources:
-        if not isinstance(item, dict) or not item.get("url"):
-            continue
-        searchable = " ".join((
-            str(item.get("title", "")),
-            str(item.get("content", ""))[:1800],
-            str(item.get("url", "")),
-        )).lower()
-        hits = {term for term in terms if term in searchable}
-        # Avoid assigning generic or unrelated search results as evidence.
-        if len(hits) < 2:
-            continue
-        ranked.append((len(hits), str(item["url"])))
-    ranked.sort(key=lambda pair: pair[0], reverse=True)
-    return list(dict.fromkeys(url for _, url in ranked))[:limit]
 
 
 def main() -> None:
@@ -165,7 +103,7 @@ def main() -> None:
             raw_keywords = re.split(r"[,;|]", raw_keywords)
         beat_keywords = [str(x).strip() for x in raw_keywords if str(x).strip()]
         narration_text = str(beat.get("narration", "")).strip()
-        first_sentence = re.split(r"(?<=[.!?])\\s+", narration_text)[0][:180]
+        first_sentence = re.split(r"(?<=[.!?])\s+", narration_text)[0][:180]
         # Model outputs sometimes put a whole SEO phrase in one keyword field.
         # Flatten it and keep searches short enough for stock libraries to understand.
         keyword_tokens = []
