@@ -52,7 +52,10 @@ def _asset_relevance(query: str, beat: dict, asset: dict) -> tuple[bool, list[st
     metadata = " ".join(str(asset.get(key, "")) for key in (
         "title", "description", "tags",
     )).lower().replace("-", " ").replace("_", " ")
-    found = sorted(term for term in target if term in metadata)
+    # Compare whole tokens. Substring matching falsely treats terms like "car"
+    # as matches for "carpet", allowing unrelated footage through the gate.
+    metadata_terms = set(re.findall(r"[a-z0-9]{3,}", metadata))
+    found = sorted(target & metadata_terms)
     # A strong match on one specific term beats unrelated generic filler.
     required = 2 if len(target) >= 5 else 1
     return len(found) >= required, found
@@ -81,7 +84,10 @@ def _relevant_sources(topic: str, beat: dict, sources: list[dict], limit: int = 
             str(item.get("content", ""))[:1800],
             str(item.get("url", "")),
         )).lower()
-        hits = {term for term in terms if term in searchable}
+        # Token-level matching avoids accidental evidence matches such as "net"
+        # inside "planet" or "router" inside a longer unrelated word.
+        searchable_terms = set(re.findall(r"[a-z0-9]{3,}", searchable))
+        hits = terms & searchable_terms
         # Avoid assigning generic or unrelated search results as evidence.
         if len(hits) < 2:
             continue
