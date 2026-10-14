@@ -127,7 +127,7 @@ def _wikipedia(query: str, limit: int) -> list[dict]:
 def search_web(query: str, limit: int = 6) -> list[dict]:
     """Collect multiple source types; cache successful searches to reduce quota and repeat traffic."""
     limit = max(1, min(int(limit), 10))
-    cache_payload = {"query": " ".join(query.lower().split()), "limit": limit}
+    cache_payload = {"query": " ".join(query.lower().split()), "limit": limit, "tavily_enabled": bool(os.getenv("TAVILY_API_KEY", "").strip())}
     cached = load_json_cache("research-search", cache_payload)
     if isinstance(cached, list) and cached:
         print(f"[research] cache hit for query={query[:100]!r} results={len(cached)}", flush=True)
