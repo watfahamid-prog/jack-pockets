@@ -134,10 +134,22 @@ def main() -> None:
                 except Exception as exc:
                     print(f"[assets] {provider_name} video search failed for beat {index + 1}: {exc}", flush=True)
                     found = []
+                # Filter each provider's results BEFORE deciding whether to stop searching.
+                # Otherwise two irrelevant Pexels hits can prevent Pixabay/Commons/Archive
+                # from ever being queried, leaving the beat with generated graphics only.
                 for item in found:
+                    relevant, matched_terms = _asset_relevance(query, beat, item)
+                    if not relevant:
+                        print(
+                            f"[assets] rejected unrelated result provider={provider_name} "
+                            f"beat={index + 1} title={str(item.get('title', ''))[:100]!r} "
+                            f"matched={matched_terms}",
+                            flush=True,
+                        )
+                        continue
                     if item.get("id") and item["id"] not in {x.get("id") for x in videos}:
                         videos.append(item)
-                # Avoid over-searching once at least two moving candidates exist.
+                # Only stop searching when we have enough relevant moving candidates.
                 if len(videos) >= 2:
                     break
 
@@ -151,10 +163,23 @@ def main() -> None:
                 ]
                 for provider_name, search in photo_providers:
                     try:
-                        candidates = search()
+                        found_photos = search()
                     except Exception as exc:
                         print(f"[assets] {provider_name} photo search failed for beat {index + 1}: {exc}", flush=True)
-                        candidates = []
+                        found_photos = []
+                    candidates = []
+                    for item in found_photos:
+                        relevant, matched_terms = _asset_relevance(query, beat, item)
+                        if not relevant:
+                            print(
+                                f"[assets] rejected unrelated photo provider={provider_name} "
+                                f"beat={index + 1} title={str(item.get('title', ''))[:100]!r} "
+                                f"matched={matched_terms}",
+                                flush=True,
+                            )
+                            continue
+                        candidates.append(item)
+                    # Continue to the next provider if this provider only returned unrelated photos.
                     if candidates:
                         break
 

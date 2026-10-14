@@ -36,11 +36,11 @@ jobs:
           cache: pip
           cache-dependency-path: requirements.txt
 
-      - name: Cache reusable research, plans, and narration
-        uses: actions/cache@v4
+      - name: Restore reusable research, plans, and narration
+        uses: actions/cache/restore@v4
         with:
           path: ~/.cache/jack-pockets
-          # A unique key lets each run save newly generated cache entries; the prefix restores prior entries.
+          # Each run gets a unique writable cache; restore the newest compatible cache first.
           key: jack-pockets-cache-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
             jack-pockets-cache-${{ runner.os }}-
@@ -85,6 +85,15 @@ jobs:
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
           MUSIC_URL: ${{ secrets.MUSIC_URL }}
         run: python generate.py --topic "${{ inputs.topic }}" --assets-per-beat 2
+
+      # Save useful research/plan/audio cache entries even when the quality gate
+      # rejects a run. Otherwise failed generation attempts never persist cache data.
+      - name: Save reusable research, plans, and narration
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/jack-pockets
+          key: jack-pockets-cache-${{ runner.os }}-${{ github.run_id }}
 
       - name: Upload documentary and diagnostics
         if: always()
