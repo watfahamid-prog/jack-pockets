@@ -1,0 +1,48 @@
+name: Test Perplexity research integration
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  research-smoke-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install research dependency
+        run: python -m pip install "requests>=2.32.0"
+
+      - name: Query Perplexity and validate structured sources
+        env:
+          PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+        run: |
+          python - <<'PY'
+          import os
+          from urllib.parse import urlparse
+          from research import _perplexity
+
+          if not os.getenv("PERPLEXITY_API_KEY", "").strip():
+              raise SystemExit("PERPLEXITY_API_KEY is missing from GitHub Actions Secrets.")
+
+          results = _perplexity(
+              "Find primary sources about the 1997 AS 7007 internet routing incident",
+              3,
+          )
+          if not results:
+              raise SystemExit("Perplexity returned no usable HTTP(S) source results.")
+
+          print(f"PASS: Perplexity returned {len(results)} structured sources.")
+          for item in results:
+              host = urlparse(item["url"]).netloc
+              print(f"- {item['title']} [{host}]")
+          PY
