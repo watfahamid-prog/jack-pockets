@@ -11,7 +11,7 @@ STOP = {
 
 
 def sentences(text: str) -> list[str]:
-    return [part.strip() for part in re.split(r"(?<=[.!?])\s+", text.strip()) if part.strip()]
+    return [part.strip() for part in re.split(r"(?<=[.!?])\\s+", text.strip()) if part.strip()]
 
 
 def classify(sentence: str):
@@ -49,31 +49,36 @@ def _editorial_dict(value):
     return value if isinstance(value, dict) else {}
 
 
-def _asset_score(asset: dict, sentence_terms: set[str], role: str) -> float:
-    # Score the asset's own searchable metadata, not merely the query that found it.
-    # A provider can return weak results for a broad query; metadata relevance helps
-    # avoid selecting an unrelated clip just because it appeared first.
-    query_terms = set(re.findall(r"[a-z0-9]+", str(asset.get("query", "")).lower())) - STOP
-    metadata_terms = set()
-    for field in ("title", "description", "tags", "credit"):
-        value = asset.get(field, "")
-        if isinstance(value, (list, tuple, set)):
-            value = " ".join(str(item) for item in value)
-        metadata_terms.update(re.findall(r"[a-z0-9]+", str(value).lower()))
-    for value in asset.get("keywords", []) or []:
-        metadata_terms.update(re.findall(r"[a-z0-9]+", str(value).lower()))
-    overlap = len(sentence_terms & metadata_terms)
-    query_overlap = len(sentence_terms & query_terms)
-    score = overlap * 5.0 + query_overlap * 0.5
+def _tokens(value) -> set[str]:
+    if isinstance(value, (list, tuple, set)):
+        value = " ".join(str(item) for item in value)
+    return set(re.findall(r"[a-z0-9]+", str(value or "").lower())) - STOP
+
+
+def _asset_score(asset: dict, sentence_terms: set[str], role: str, reuse_count: int = 0) -> float:
+    """Score actual asset metadata against this sentence; novelty is only a tie-breaker."""
+    metadata_terms: set[str] = set()
+    for field in ("title", "description", "tags"):
+        metadata_terms.update(_tokens(asset.get(field, "")))
+
+    # Do not score asset["query"] or asset["keywords"]: the pipeline copies the
+    # same beat-level search terms onto every result, which falsely makes all clips
+    # appear equally relevant to every sentence in that beat.
+    overlap = sentence_terms & metadata_terms
+    score = len(overlap) * 6.0
     kind = str(asset.get("kind", "")).lower()
     asset_role = str(asset.get("role", "")).lower()
-    # Prefer real footage/photos over synthetic template cards; graphics are supporting evidence only.
+
+    # Relevance dominates variety: a relevant repeat is better than an unrelated
+    # fresh clip, but repeated use is discouraged when similarly relevant options exist.
     if kind == "video":
-        score += 16.0
+        score += 2.0
     elif kind == "photo":
-        score += 6.0
+        score += 1.0
     elif kind in {"generated", "document"}:
-        score -= 4.0
+        score -= 2.0
+    score -= min(max(0, reuse_count) * 2.0, 6.0)
+
     if role in {"map", "document", "screenshot", "chart"} and asset_role == role:
         score += 1.0
     if role in {"map", "document", "screenshot", "chart"} and kind == "generated" and role in str(asset.get("id", "")).lower():
@@ -117,14 +122,10 @@ def build_shots(beat, seed=42, aligned_words=None, sentences_override=None):
         layers = []
         chosen = None
         if assets:
-            # Use every distinct asset before reusing any clip. Within that set,
-            # prioritize actual moving footage and sentence relevance.
-            unused_assets = [asset for asset in assets if used_counts.get(str(asset["id"]), 0) == 0]
-            pool = unused_assets or assets
             ranked = sorted(
-                pool,
+                assets,
                 key=lambda asset: (
-                    _asset_score(asset, terms, role),
+                    _asset_score(asset, terms, role, used_counts.get(str(asset["id"]), 0)),
                     str(asset.get("kind", "")).lower() == "video",
                     str(asset["id"]),
                 ),
