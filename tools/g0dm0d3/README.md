@@ -11,6 +11,10 @@ This folder contains a vendored copy of the standalone G0DM0D3 interface from th
 
 Use it as a separate research and idea-comparison tool while developing Jack Pockets scripts, source plans, or editing approaches. It is **not connected to the video-generation workflow** and does not automatically change or improve generated videos.
 
+## Free-only setup
+
+For a step-by-step guide to using the free OpenRouter model router or a local model without intentionally incurring model charges, see [FREE_SETUP.md](./FREE_SETUP.md). Free model access has limits and can change; do not add credits or select paid model IDs for this test.
+
 ## Open it
 
 Download or clone this repository and open `tools/g0dm0d3/index.html` in a modern browser. The standalone interface does not need a build step.
