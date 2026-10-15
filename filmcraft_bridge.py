@@ -141,6 +141,26 @@ def fit_video_to_canvas(source_path: str, output_path: Path, width: int = 1920, 
     return output_path
 
 
+def scale_video_clips_to_sequence(project_path: Path) -> int:
+    """Enable FilmCraft's native scale-to-frame flag on imported video clips."""
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    items = project.get("project", {}).get("items", {})
+    updated = 0
+    for item in items.values():
+        sequence = item.get("kind", {}).get("Sequence")
+        if not isinstance(sequence, dict):
+            continue
+        for track in sequence.get("video_tracks", []):
+            for clip in track.get("items", []):
+                if clip.get("enabled", True) and clip.get("scale_to_frame") is not True:
+                    clip["scale_to_frame"] = True
+                    updated += 1
+    if updated == 0:
+        raise RuntimeError("No enabled video clips found to scale to the sequence frame")
+    project_path.write_text(json.dumps(project, indent=2), encoding="utf-8")
+    return updated
+
+
 def execute_plan(plan: dict[str, Any], cli: str, output_dir: Path) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     source_paths = []
@@ -190,6 +210,14 @@ def execute_plan(plan: dict[str, Any], cli: str, output_dir: Path) -> Path:
         (output_dir / "placements.json").write_text(json.dumps(results, indent=2), encoding="utf-8")
         if result.returncode:
             raise RuntimeError(f"FilmCraft timeline placement failed: {result.stderr or result.stdout}")
+
+    # The source clips are already pre-scaled to the sequence canvas above; also
+    # enable FilmCraft's native flag so project metadata agrees with that intent.
+    scaled = scale_video_clips_to_sequence(project)
+    (output_dir / "scale-to-frame.json").write_text(
+        json.dumps({"enabled_video_clips_scaled_to_sequence": scaled}, indent=2),
+        encoding="utf-8",
+    )
 
     export_path = (output_dir / "filmcraft-manifest-preview.mp4").resolve()
     result = subprocess.run(
