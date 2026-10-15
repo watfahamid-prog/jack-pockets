@@ -63,3 +63,7 @@ Stock search can still return weak matches, and high-quality footage depends on 
 
 
 Continuous validation also compiles every Python module with `python -m compileall -q .` before a generation run can reach any API calls.
+
+## Optional research assistant: G0DM0D3
+
+A standalone, vendored copy of [G0DM0D3](https://github.com/elder-plinius/G0DM0D3) is available in [`tools/g0dm0d3/`](tools/g0dm0d3/). It can be used separately to compare research, script ideas, and editing plans across configured AI models. It is **not wired into the documentary generation pipeline**. Provider API usage may cost money; do not commit API keys. Review [the local usage and privacy notes](tools/g0dm0d3/README.md) and the included AGPL-3.0 license.
