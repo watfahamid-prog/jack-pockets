@@ -11,7 +11,7 @@ STOP = {
 
 
 def sentences(text: str) -> list[str]:
-    return [part.strip() for part in re.split(r"(?<=[.!?])\\s+", text.strip()) if part.strip()]
+    return [part.strip() for part in re.split(r"(?<=[.!?])\s+", text.strip()) if part.strip()]
 
 
 def classify(sentence: str):
