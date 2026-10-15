@@ -18,6 +18,9 @@ class TTSFallbackTests(unittest.TestCase):
             "ELEVENLABS_VOICE_ID": "test-voice",
             "OPENAI_API_KEY": "test-openai-key",
             "TTS_VOICE": "en-US-GuyNeural",
+            # Unit tests must exercise the mocked providers, not reuse a runner's
+            # persistent narration cache from an earlier workflow run.
+            "JACKPOCKETS_DISABLE_CACHE": "1",
         })
         self.env.start()
 
