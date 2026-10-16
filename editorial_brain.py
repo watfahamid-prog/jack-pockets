@@ -7,7 +7,11 @@ STOP = {
     "is", "was", "are", "were", "this", "that", "it", "as", "at", "by", "from",
     "into", "about", "then", "than", "they", "their", "there", "which", "what",
     "when", "where", "who", "how", "why", "its", "his", "her", "has", "have",
+    "most", "more", "very", "really", "thing", "things", "ever", "one", "ones",
+    "people", "person", "time", "way", "like", "just", "can", "could", "would",
+    "should", "will", "do", "does", "did", "not", "no", "yes",
 }
+MIN_VISUAL_RELEVANCE = 7.0
 
 
 def sentences(text: str) -> list[str]:
@@ -34,13 +38,62 @@ def keywords(sentence: str) -> list[str]:
     return list(dict.fromkeys(word.lower() for word in words if word.lower() not in STOP))[:8]
 
 
+def _value_label(sentence: str) -> str:
+    numbers = re.findall(
+        r"(?:\$|€|£)?\d+(?:[,.]\d+)*(?:%|\s*(?:million|billion|trillion|thousand|M|B|T))?",
+        sentence,
+        re.I,
+    )
+    if not numbers:
+        return ""
+    cue = re.search(
+        r"\b(total|cost|costs|worth|value|price|spent|spending|estimated|estimate|budget|valued|reached|sold|sold for)\b",
+        sentence,
+        re.I,
+    )
+    if not cue:
+        return ""
+    label = numbers[0].replace(",", "")
+    prefix = cue.group(1).upper()
+    if prefix in {"COSTS", "SPENT", "SPENDING"}:
+        prefix = "COST"
+    elif prefix in {"ESTIMATED", "ESTIMATE", "VALUED"}:
+        prefix = "ESTIMATE"
+    return f"{prefix} = {label}"[:44]
+
+
 def _span(sentence, words, position):
+    """Map a sentence onto aligned words, with a safe sequential fallback."""
     target = re.findall(r"[a-z0-9]+", sentence.lower())
     flat = [re.sub(r"[^a-z0-9]", "", str(word.get("word", "")).lower()) for word in words]
+    if not target or position >= len(flat):
+        return position, min(len(words), position + max(1, len(target)))
+
+    # Exact contiguous match is best.
     for index in range(position, max(position, len(flat) - len(target) + 1)):
         if flat[index:index + len(target)] == target:
             return index, index + len(target)
-    return position, min(len(words), position + max(1, len(target)))
+
+    # Whisper punctuation/casing can prevent an exact match. Anchor on the first
+    # distinctive token, then take a bounded span through the last matching token.
+    anchors = [token for token in target if token not in STOP]
+    start = None
+    for token in anchors or target:
+        try:
+            start = flat.index(token, position)
+            break
+        except ValueError:
+            continue
+    if start is None:
+        # Last-resort sequential allocation. Crucially, advance the cursor instead
+        # of repeatedly returning the same 0.0 start time for later sentences.
+        return position, min(len(words), position + max(1, len(target)))
+
+    end = min(len(flat), start + max(1, len(target) + 5))
+    for index in range(start + 1, end):
+        if flat[index] in target[-3:]:
+            end = index + 1
+    return start, max(start + 1, end)
 
 
 def _editorial_dict(value):
@@ -49,35 +102,39 @@ def _editorial_dict(value):
     return value if isinstance(value, dict) else {}
 
 
-def _asset_score(asset: dict, sentence_terms: set[str], role: str) -> float:
-    # Score the asset's own searchable metadata, not merely the query that found it.
-    # A provider can return weak results for a broad query; metadata relevance helps
-    # avoid selecting an unrelated clip just because it appeared first.
-    query_terms = set(re.findall(r"[a-z0-9]+", str(asset.get("query", "")).lower())) - STOP
-    metadata_terms = set()
-    for field in ("title", "description", "tags", "credit"):
-        value = asset.get(field, "")
-        if isinstance(value, (list, tuple, set)):
-            value = " ".join(str(item) for item in value)
-        metadata_terms.update(re.findall(r"[a-z0-9]+", str(value).lower()))
-    for value in asset.get("keywords", []) or []:
-        metadata_terms.update(re.findall(r"[a-z0-9]+", str(value).lower()))
-    overlap = len(sentence_terms & metadata_terms)
-    query_overlap = len(sentence_terms & query_terms)
-    score = overlap * 5.0 + query_overlap * 0.5
+def _tokens(value) -> set[str]:
+    if isinstance(value, (list, tuple, set)):
+        value = " ".join(str(item) for item in value)
+    return set(re.findall(r"[a-z0-9]+", str(value or "").lower())) - STOP
+
+
+def _asset_relevance(asset: dict, sentence_terms: set[str], role: str) -> float:
+    metadata_terms: set[str] = set()
+    for field in ("title", "description", "tags"):
+        metadata_terms.update(_tokens(asset.get(field, "")))
+
+    overlap = sentence_terms & metadata_terms
+    score = len(overlap) * 6.0
     kind = str(asset.get("kind", "")).lower()
     asset_role = str(asset.get("role", "")).lower()
-    # Prefer real footage/photos over synthetic template cards; graphics are supporting evidence only.
     if kind == "video":
-        score += 16.0
+        score += 2.0
     elif kind == "photo":
-        score += 6.0
+        score += 1.0
     elif kind in {"generated", "document"}:
-        score -= 4.0
+        score -= 2.0
     if role in {"map", "document", "screenshot", "chart"} and asset_role == role:
         score += 1.0
     if role in {"map", "document", "screenshot", "chart"} and kind == "generated" and role in str(asset.get("id", "")).lower():
         score += 0.5
+    return score
+
+
+def _asset_score(asset: dict, sentence_terms: set[str], role: str, reuse_count: int = 0, previous_id: str = "") -> float:
+    score = _asset_relevance(asset, sentence_terms, role)
+    score -= min(max(0, reuse_count) * 2.0, 6.0)
+    if previous_id and str(asset.get("id")) == previous_id:
+        score -= 3.5
     return score
 
 
@@ -88,18 +145,19 @@ def build_shots(beat, seed=42, aligned_words=None, sentences_override=None):
     shots = []
     position = 0
     used_counts: dict[str, int] = {}
+    previous_asset_id = ""
 
     for index, sentence in enumerate(sentence_list):
         intent, reason, intensity = classify(sentence)
         if aligned_words:
             start_word, end_word = _span(sentence, aligned_words, position)
-            position = max(position, end_word)
+            position = max(position + 1, end_word)
             start = max(0.0, float(aligned_words[start_word]["start"]) - float(beat["start"])) if start_word < len(aligned_words) else 0.0
             end = min(total, float(aligned_words[end_word - 1]["end"]) - float(beat["start"])) if end_word > start_word else start + 0.5
         else:
             start = shots[-1]["end"] if shots else 0.0
             end = start + max(0.45, total / max(1, len(sentence_list)))
-        start = min(total - 0.25, max(0.0, start))
+        start = min(max(0.0, total - 0.25), max(0.0, start))
         end = total if index == len(sentence_list) - 1 else min(total, max(start + 0.25, end))
         if end <= start:
             end = min(total, start + 0.25)
@@ -117,47 +175,59 @@ def build_shots(beat, seed=42, aligned_words=None, sentences_override=None):
         layers = []
         chosen = None
         if assets:
-            # Use every distinct asset before reusing any clip. Within that set,
-            # prioritize actual moving footage and sentence relevance.
-            unused_assets = [asset for asset in assets if used_counts.get(str(asset["id"]), 0) == 0]
-            pool = unused_assets or assets
-            ranked = sorted(
-                pool,
-                key=lambda asset: (
-                    _asset_score(asset, terms, role),
-                    str(asset.get("kind", "")).lower() == "video",
-                    str(asset["id"]),
-                ),
-                reverse=True,
-            )
-            chosen = ranked[0]
-            used_counts[str(chosen["id"])] = used_counts.get(str(chosen["id"]), 0) + 1
-            asset_id = str(chosen["id"])
-            if role in {"document", "screenshot", "chart", "map"} and chosen.get("kind") == "generated":
-                x, y, width, height = 5, 8, 90, 78
-            else:
-                x, y, width, height = 0, 0, 100, 100
-            layers.append({
-                "id": f"visual-{index}", "kind": "image", "assetId": asset_id,
-                "x": x, "y": y, "width": width, "height": height,
-                "rotation": 0, "opacity": 1, "z": 0, "animation": motion,
-            })
+            eligible = [asset for asset in assets if _asset_relevance(asset, terms, role) >= MIN_VISUAL_RELEVANCE]
+            if not eligible:
+                eligible = [
+                    asset for asset in assets
+                    if str(asset.get("kind", "")).lower() in {"generated", "document"}
+                    and str(asset.get("role", "")).lower() == role
+                ]
+            if eligible:
+                ranked = sorted(
+                    eligible,
+                    key=lambda asset: (
+                        _asset_score(asset, terms, role, used_counts.get(str(asset["id"]), 0), previous_asset_id),
+                        str(asset.get("kind", "")).lower() == "video",
+                        str(asset["id"]),
+                    ),
+                    reverse=True,
+                )
+                chosen = ranked[0]
+                used_counts[str(chosen["id"])] = used_counts.get(str(chosen["id"]), 0) + 1
+                previous_asset_id = str(chosen["id"])
+                asset_id = str(chosen["id"])
+                if role in {"document", "screenshot", "chart", "map"} and chosen.get("kind") == "generated":
+                    x, y, width, height = 5, 8, 90, 78
+                else:
+                    x, y, width, height = 0, 0, 100, 100
+                layers.append({
+                    "id": f"visual-{index}", "kind": "image", "assetId": asset_id,
+                    "x": x, "y": y, "width": width, "height": height,
+                    "rotation": 0, "opacity": 1, "z": 0, "animation": motion,
+                })
 
-        # Keep on-screen text deliberate: no repeated keyword stickers or generic evidence labels.
-        important = [word for word in keywords(sentence) if len(word) >= 5]
+        value_label = _value_label(sentence)
         overlay = str(decision.get("overlay") or decision.get("text_overlay") or "").strip()
         if overlay:
             layers.append({
                 "id": f"overlay-{index}", "kind": "label", "text": overlay[:54],
                 "x": 6, "y": 7, "width": 48, "height": 7,
-                "rotation": 0, "opacity": 0.92, "z": 5, "animation": "static",
+                "rotation": 0, "opacity": 0.94, "z": 5, "animation": "static",
             })
-        elif reason == "reveal" and important and len(sentence) < 105:
+        elif value_label:
             layers.append({
-                "id": f"reveal-{index}", "kind": "text", "text": important[-1].upper(),
-                "x": 7, "y": 70, "width": 70, "height": 16,
-                "rotation": 0, "opacity": 0.94, "z": 5, "animation": "push",
+                "id": f"value-{index}", "kind": "label", "text": value_label,
+                "x": 6, "y": 8, "width": 54, "height": 8,
+                "rotation": 0, "opacity": 0.96, "z": 5, "animation": "push",
             })
+        elif reason == "reveal":
+            important = [word for word in keywords(sentence) if len(word) >= 5]
+            if important and len(sentence) < 105:
+                layers.append({
+                    "id": f"reveal-{index}", "kind": "text", "text": important[-1].upper(),
+                    "x": 7, "y": 70, "width": 70, "height": 16,
+                    "rotation": 0, "opacity": 0.94, "z": 5, "animation": "push",
+                })
 
         actions = [{"type": "zoom" if intensity > 0.72 else "pan", "at": 0.12, "duration": min(0.8, max(0.2, (end - start) * 0.45)), "intensity": min(0.7, intensity * 0.45), "reason": "pace"}]
         if reason == "reveal":

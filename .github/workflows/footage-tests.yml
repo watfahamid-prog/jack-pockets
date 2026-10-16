@@ -1,0 +1,32 @@
+name: Footage Matching Tests
+
+on:
+  pull_request:
+    paths:
+      - "editorial_brain.py"
+      - "quality.py"
+      - "tests/**"
+      - ".github/workflows/footage-tests.yml"
+  push:
+    branches:
+      - main
+      - "fix/sentence-footage-matching"
+    paths:
+      - "editorial_brain.py"
+      - "quality.py"
+      - "tests/**"
+      - ".github/workflows/footage-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  targeted-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run footage and visual quality regression tests
+        run: python -m unittest discover -s tests -p 'test_editorial_brain.py' -v && python -m unittest discover -s tests -p 'test_quality.py' -v
