@@ -36,10 +36,10 @@ const LayerView: React.FC<{ layer: Layer; beat: Beat; shot: Shot; frame: number;
       <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg,rgba(0,0,0,.03),transparent 58%,rgba(0,0,0,.42))" }} />
     </div>;
   }
-  if (layer.kind === "highlight") return <div style={{ ...base, background: "linear-gradient(90deg,rgba(245,205,40,.4),rgba(245,205,40,.04))", mixBlendMode: "screen" }} />;
+  if (layer.kind === "highlight") return <div style={{ ...base, background: "linear-gradient(90deg,rgba(183,255,74,.34),rgba(183,255,74,.03))", mixBlendMode: "screen" }} />;
   if (layer.kind === "arrow") return <div style={{ ...base, color: "#fff", fontSize: "4vw", fontWeight: 900, textShadow }}>{layer.text || "→"}</div>;
-  // Editorial/debug labels such as "B ROLL", "LOCATION", and "None" are internal metadata, not viewer-facing graphics.
-  if (layer.kind === "label") return null;
+  // Reference-style value/source labels: short, bright, and never boxed.
+  if (layer.kind === "label") return <div style={{ ...base, fontFamily: "Arial Black,Arial,sans-serif", fontWeight: 900, fontSize: "clamp(22px,2.35vw,46px)", lineHeight: 1, letterSpacing: 0.2, color: "#b7ff4a", textTransform: "uppercase", textShadow: "0 2px 10px rgba(0,0,0,.95)", display: "flex", alignItems: "flex-start", justifyContent: "flex-start", whiteSpace: "nowrap" }}>{layer.text}</div>;
   if (layer.kind === "text") return <div style={{ ...base, fontFamily: "Arial Black,Arial,sans-serif", fontWeight: 900, fontSize: "clamp(34px,5vw,96px)", lineHeight: 0.9, letterSpacing: -2, color: "#f5f2ea", textTransform: "uppercase", textShadow, display: "flex", alignItems: "flex-end" }}>{layer.text}</div>;
   return null;
 };
@@ -94,7 +94,7 @@ export const JackPocketsVideo: React.FC<{ manifest: VideoManifest }> = ({ manife
     <AbsoluteFill style={{ pointerEvents: "none", zIndex: 80 }}>
       {caption && <div style={{ position: "absolute", left: "12%", right: "12%", bottom: "6%", minHeight: 52, display: "flex", alignItems: "center", justifyContent: "center", padding: "8px 18px", boxSizing: "border-box", background: "rgba(0,0,0,.32)", fontFamily: "Arial,sans-serif", fontSize: "clamp(22px,2.15vw,40px)", fontWeight: 800, color: "#fff", textShadow: "0 2px 12px #000", textAlign: "center" }}>{caption}</div>}
       {manifest.showProgressBar && <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 3, background: "rgba(255,255,255,.16)" }}>
-        <div style={{ height: "100%", width: `${Math.min(100, time / manifest.duration * 100)}%`, background: "#e8c547" }} />
+        <div style={{ height: "100%", width: `${Math.min(100, time / manifest.duration * 100)}%`, background: "#b7ff4a" }} />
       </div>}
     </AbsoluteFill>
     {manifest.audioSrc && <Audio src={staticFile(manifest.audioSrc)} />}
