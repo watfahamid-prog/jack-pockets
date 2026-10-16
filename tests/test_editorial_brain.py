@@ -49,6 +49,31 @@ class FootageMatchingTests(unittest.TestCase):
         self.assertEqual(result["shots"][0]["assetIds"], ["ship"])
         self.assertEqual(result["shots"][1]["assetIds"], ["mountain"])
 
+    def test_weak_assets_are_not_used_as_random_filler(self):
+        beat = {
+            "id": "beat-2", "start": 0, "end": 5,
+            "narration": "The auction revealed a rare emerald necklace.",
+            "assets": [
+                {"id": "bridge", "kind": "video", "title": "City bridge at sunset",
+                 "description": "traffic over a river", "tags": ["architecture"]},
+            ],
+        }
+        result = build_shots(beat)
+        self.assertEqual(result["shots"][0]["assetIds"], [])
+
+    def test_relevant_repetition_is_discouraged_when_an_equal_match_exists(self):
+        beat = {
+            "id": "beat-3", "start": 0, "end": 10,
+            "narration": "Gold bars fill the vault. Gold coins fill another vault.",
+            "assets": [
+                {"id": "bars", "kind": "video", "title": "Gold bars in a vault", "description": "", "tags": []},
+                {"id": "coins", "kind": "video", "title": "Gold coins in a vault", "description": "", "tags": []},
+            ],
+        }
+        result = build_shots(beat)
+        ids = [shot["assetIds"][0] for shot in result["shots"]]
+        self.assertEqual(ids, ["bars", "coins"])
+
 
 if __name__ == "__main__":
     unittest.main()
