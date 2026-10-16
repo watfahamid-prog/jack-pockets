@@ -85,6 +85,25 @@ class FootageMatchingTests(unittest.TestCase):
         self.assertEqual([layer["text"] for layer in labels], ["TOTAL = $50 billion"])
         self.assertNotIn("$50 billion", result["shots"][0].get("assetIds", []))
 
+    def test_unmatched_aligned_sentences_still_advance_timing(self):
+        beat = {
+            "id": "beat-5", "start": 10, "end": 20,
+            "narration": "First sentence. Second sentence.",
+            "assets": [],
+        }
+        words = [
+            {"word": "First", "start": 10.0, "end": 10.4},
+            {"word": "sentence", "start": 10.4, "end": 11.0},
+            {"word": "unexpected", "start": 11.1, "end": 11.5},
+            {"word": "words", "start": 11.5, "end": 12.0},
+            {"word": "Second", "start": 12.0, "end": 12.5},
+            {"word": "sentence", "start": 12.5, "end": 13.0},
+        ]
+        result = build_shots(beat, aligned_words=words)
+        self.assertEqual(len(result["shots"]), 2)
+        self.assertLess(result["shots"][0]["start"], result["shots"][1]["start"])
+        self.assertGreater(result["shots"][1]["start"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()
