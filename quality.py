@@ -4,6 +4,9 @@ import json
 from pathlib import Path
 
 
+BANNED_GENERATED_ROLES = {"b-roll", "photo", "texture", "archival photo"}
+
+
 def validate(path: str) -> list[str]:
     manifest_path = Path(path)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -56,6 +59,9 @@ def validate(path: str) -> list[str]:
                 real_shots += 1
             if any(a.get("kind") == "generated" for a in chosen):
                 generated_shots += 1
+                for asset in chosen:
+                    if asset.get("kind") == "generated" and str(asset.get("role", "")).lower() in BANNED_GENERATED_ROLES:
+                        errors.append(f"graphics gate: generated filler role is not allowed ({asset.get('id')})")
             primary = ids[0] if ids else ""
             if primary and primary == previous_asset:
                 consecutive_same += 1
@@ -72,8 +78,8 @@ def validate(path: str) -> list[str]:
         errors.append(f"footage gate: only {real_ratio:.0%} of shots use real stock video/photos; need at least 55%")
 
     generated_ratio = generated_shots / max(1, total_shots)
-    if generated_ratio > 0.45:
-        errors.append(f"graphics gate: generated graphics fill {generated_ratio:.0%} of shots; maximum is 45%")
+    if generated_ratio > 0.40:
+        errors.append(f"graphics gate: generated graphics fill {generated_ratio:.0%} of shots; maximum is 40%")
 
     if consecutive_same > 0:
         errors.append(f"repetition gate: {consecutive_same} consecutive shots reuse the same visual")
