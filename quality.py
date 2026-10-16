@@ -5,6 +5,18 @@ from pathlib import Path
 
 
 BANNED_GENERATED_ROLES = {"b-roll", "photo", "texture", "archival photo"}
+MAX_VISUAL_REUSE = 4
+MAX_GENERATED_RATIO = 0.40
+MIN_REAL_VIDEO_CLIPS = 4
+MIN_REAL_SHOT_RATIO = 0.55
+MAX_COVERAGE_GAP = 0.35
+
+
+def _as_float(value, default=0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def validate(path: str) -> list[str]:
@@ -21,7 +33,7 @@ def validate(path: str) -> list[str]:
     if (manifest.get("width"), manifest.get("height")) != (1920, 1080):
         errors.append("output must be 1920x1080")
 
-    duration = float(manifest.get("duration", 0))
+    duration = _as_float(manifest.get("duration"))
     if duration < 480:
         errors.append(f"documentary is under 8 minutes ({duration:.1f}s)")
     if duration > 1800:
@@ -35,24 +47,36 @@ def validate(path: str) -> list[str]:
     if not manifest.get("audioSrc"):
         errors.append("missing narration audio source")
 
-    asset_index = {}
-    selected_asset_ids: list[str] = []
+    asset_index: dict[str, dict] = {}
     selected_asset_counts: dict[str, int] = {}
     real_shots = 0
     total_shots = 0
     generated_shots = 0
     consecutive_same = 0
     previous_asset = ""
+    all_manifest_sources = {str(url) for url in (manifest.get("sources") or []) if url}
 
     for beat in beats:
+        beat_id = str(beat.get("id", "unknown"))
+        beat_sources = beat.get("source_urls")
+        if not isinstance(beat_sources, list) or not beat_sources:
+            errors.append(f"evidence gate: beat has no supporting source_urls: {beat_id}")
+        else:
+            for url in beat_sources:
+                if not str(url).strip():
+                    errors.append(f"evidence gate: empty source URL in {beat_id}")
+                elif all_manifest_sources and str(url) not in all_manifest_sources:
+                    errors.append(f"evidence gate: beat source is missing from manifest sources: {beat_id}")
+
         for asset in beat.get("assets", []):
-            if asset.get("id"):
-                asset_index[str(asset["id"])] = asset
+            asset_id = str(asset.get("id") or "")
+            if asset_id:
+                asset_index[asset_id] = asset
+
         for shot in beat.get("shots", []):
             total_shots += 1
             ids = [str(x) for x in shot.get("assetIds", []) if x]
             for asset_id in ids:
-                selected_asset_ids.append(asset_id)
                 selected_asset_counts[asset_id] = selected_asset_counts.get(asset_id, 0) + 1
             chosen = [asset_index.get(x, {}) for x in ids]
             if any(a.get("kind") in {"video", "photo"} for a in chosen):
@@ -62,41 +86,49 @@ def validate(path: str) -> list[str]:
                 for asset in chosen:
                     if asset.get("kind") == "generated" and str(asset.get("role", "")).lower() in BANNED_GENERATED_ROLES:
                         errors.append(f"graphics gate: generated filler role is not allowed ({asset.get('id')})")
+            for asset in chosen:
+                kind = str(asset.get("kind", "")).lower()
+                if kind in {"video", "photo"}:
+                    if not asset.get("source_url"):
+                        errors.append(f"provenance gate: real asset has no source_url ({asset.get('id')})")
+                    if not asset.get("license"):
+                        errors.append(f"provenance gate: real asset has no license ({asset.get('id')})")
             primary = ids[0] if ids else ""
             if primary and primary == previous_asset:
                 consecutive_same += 1
             previous_asset = primary
 
-    selected_unique = set(selected_asset_ids)
+    selected_unique = set(selected_asset_counts)
     selected_assets = [asset_index[x] for x in selected_unique if x in asset_index]
     selected_videos = {str(a.get("id")) for a in selected_assets if a.get("kind") == "video"}
-    if len(selected_videos) < 4:
-        errors.append(f"footage gate: only {len(selected_videos)} distinct real video clips selected; need at least 4")
+    if len(selected_videos) < MIN_REAL_VIDEO_CLIPS:
+        errors.append(f"footage gate: only {len(selected_videos)} distinct real video clips selected; need at least {MIN_REAL_VIDEO_CLIPS}")
 
     real_ratio = real_shots / max(1, total_shots)
-    if real_ratio < 0.55:
-        errors.append(f"footage gate: only {real_ratio:.0%} of shots use real stock video/photos; need at least 55%")
+    if real_ratio < MIN_REAL_SHOT_RATIO:
+        errors.append(f"footage gate: only {real_ratio:.0%} of shots use real stock video/photos; need at least {MIN_REAL_SHOT_RATIO:.0%}")
 
     generated_ratio = generated_shots / max(1, total_shots)
-    if generated_ratio > 0.40:
-        errors.append(f"graphics gate: generated graphics fill {generated_ratio:.0%} of shots; maximum is 40%")
+    if generated_ratio > MAX_GENERATED_RATIO:
+        errors.append(f"graphics gate: generated graphics fill {generated_ratio:.0%} of shots; maximum is {MAX_GENERATED_RATIO:.0%}")
 
     if consecutive_same > 0:
         errors.append(f"repetition gate: {consecutive_same} consecutive shots reuse the same visual")
 
     heavy_reuse = sorted(
-        ((count, asset_id) for asset_id, count in selected_asset_counts.items() if count >= 5),
+        ((count, asset_id) for asset_id, count in selected_asset_counts.items() if count > MAX_VISUAL_REUSE),
         reverse=True,
     )
     if heavy_reuse:
         details = ", ".join(f"{asset_id}×{count}" for count, asset_id in heavy_reuse[:3])
-        errors.append(f"repetition gate: a visual is reused 5+ times ({details})")
+        errors.append(f"repetition gate: a visual is reused more than {MAX_VISUAL_REUSE} times ({details})")
 
     last_beat_end = 0.0
     for beat in beats:
-        beat_id = beat.get("id", "unknown")
-        start = float(beat.get("start", 0))
-        end = float(beat.get("end", 0))
+        beat_id = str(beat.get("id", "unknown"))
+        start = _as_float(beat.get("start"))
+        end = _as_float(beat.get("end"))
+        beat_duration = max(0.0, end - start)
         if start < last_beat_end - 0.05:
             errors.append(f"overlapping beat: {beat_id}")
         if end <= start:
@@ -109,15 +141,17 @@ def validate(path: str) -> list[str]:
             continue
         previous_end = 0.0
         for shot in shots:
-            shot_id = shot.get("id", "unknown")
-            shot_start = float(shot.get("start", 0))
-            shot_end = float(shot.get("end", 0))
+            shot_id = str(shot.get("id", "unknown"))
+            shot_start = _as_float(shot.get("start"))
+            shot_end = _as_float(shot.get("end"))
             if shot_end <= shot_start:
                 errors.append(f"invalid shot timing: {shot_id}")
-            if shot_start < -0.05 or shot_end > end - start + 0.1:
+            if shot_start < -0.05 or shot_end > beat_duration + 0.1:
                 errors.append(f"shot outside beat: {shot_id}")
             if shot_start < previous_end - 0.05:
                 errors.append(f"overlapping shots in beat {beat_id}: {shot_id}")
+            if shot_start - previous_end > MAX_COVERAGE_GAP and previous_end > 0:
+                errors.append(f"visual coverage gap in beat {beat_id}: {shot_id}")
             previous_end = max(previous_end, shot_end)
             if not shot.get("layers"):
                 errors.append(f"shot has no visual layers: {shot_id}")
@@ -129,7 +163,12 @@ def validate(path: str) -> list[str]:
                     errors.append(f"missing asset reference: {shot_id} -> {asset_id}")
                 if layer.get("kind") in {"label", "text"} and len(str(layer.get("text", ""))) > 70:
                     errors.append(f"text gate: overlay too long in {shot_id}")
+        if shots:
+            if _as_float(shots[0].get("start")) > MAX_COVERAGE_GAP:
+                errors.append(f"visual coverage gap at beat start: {beat_id}")
+            if beat_duration - _as_float(shots[-1].get("end")) > MAX_COVERAGE_GAP:
+                errors.append(f"visual coverage gap at beat end: {beat_id}")
 
-    if duration > 0 and beats and abs(float(beats[-1].get("end", 0)) - duration) > 0.5:
+    if duration > 0 and beats and abs(_as_float(beats[-1].get("end")) - duration) > 0.5:
         errors.append("manifest duration does not match final beat")
     return sorted(set(errors))
