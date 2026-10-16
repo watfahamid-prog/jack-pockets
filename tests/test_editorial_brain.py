@@ -74,6 +74,17 @@ class FootageMatchingTests(unittest.TestCase):
         ids = [shot["assetIds"][0] for shot in result["shots"]]
         self.assertEqual(ids, ["bars", "coins"])
 
+    def test_reference_style_value_label_is_short_and_specific(self):
+        beat = {
+            "id": "beat-4", "start": 0, "end": 6,
+            "narration": "The total cost reached $50 billion.",
+            "assets": [],
+        }
+        result = build_shots(beat)
+        labels = [layer for layer in result["shots"][0]["layers"] if layer["kind"] == "label"]
+        self.assertEqual([layer["text"] for layer in labels], ["TOTAL = $50 billion"])
+        self.assertNotIn("$50 billion", result["shots"][0].get("assetIds", []))
+
 
 if __name__ == "__main__":
     unittest.main()
