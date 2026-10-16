@@ -9,7 +9,7 @@ STOP = {
     "when", "where", "who", "how", "why", "its", "his", "her", "has", "have",
     "most", "more", "very", "really", "thing", "things", "ever", "one", "ones",
     "people", "person", "time", "way", "like", "just", "can", "could", "would",
-    "should", "will", "do", "does", "did", "not", "no", "yes", "than",
+    "should", "will", "do", "does", "did", "not", "no", "yes",
 }
 MIN_VISUAL_RELEVANCE = 7.0
 
@@ -39,11 +39,18 @@ def keywords(sentence: str) -> list[str]:
 
 
 def _value_label(sentence: str) -> str:
-    """Create the compact evidence/value labels seen in the reference style."""
-    numbers = re.findall(r"(?:\$|€|£)?\d+(?:[,.]\d+)*(?:%|\s*(?:million|billion|trillion|thousand|M|B|T))?", sentence, re.I)
+    numbers = re.findall(
+        r"(?:\$|€|£)?\d+(?:[,.]\d+)*(?:%|\s*(?:million|billion|trillion|thousand|M|B|T))?",
+        sentence,
+        re.I,
+    )
     if not numbers:
         return ""
-    cue = re.search(r"\b(total|cost|costs|worth|value|price|spent|spending|estimated|estimate|budget|valued|reached|sold|sold for)\b", sentence, re.I)
+    cue = re.search(
+        r"\b(total|cost|costs|worth|value|price|spent|spending|estimated|estimate|budget|valued|reached|sold|sold for)\b",
+        sentence,
+        re.I,
+    )
     if not cue:
         return ""
     label = numbers[0].replace(",", "")
@@ -56,12 +63,37 @@ def _value_label(sentence: str) -> str:
 
 
 def _span(sentence, words, position):
+    """Map a sentence onto aligned words, with a safe sequential fallback."""
     target = re.findall(r"[a-z0-9]+", sentence.lower())
     flat = [re.sub(r"[^a-z0-9]", "", str(word.get("word", "")).lower()) for word in words]
+    if not target or position >= len(flat):
+        return position, min(len(words), position + max(1, len(target)))
+
+    # Exact contiguous match is best.
     for index in range(position, max(position, len(flat) - len(target) + 1)):
         if flat[index:index + len(target)] == target:
             return index, index + len(target)
-    return position, min(len(words), position + max(1, len(target)))
+
+    # Whisper punctuation/casing can prevent an exact match. Anchor on the first
+    # distinctive token, then take a bounded span through the last matching token.
+    anchors = [token for token in target if token not in STOP]
+    start = None
+    for token in anchors or target:
+        try:
+            start = flat.index(token, position)
+            break
+        except ValueError:
+            continue
+    if start is None:
+        # Last-resort sequential allocation. Crucially, advance the cursor instead
+        # of repeatedly returning the same 0.0 start time for later sentences.
+        return position, min(len(words), position + max(1, len(target)))
+
+    end = min(len(flat), start + max(1, len(target) + 5))
+    for index in range(start + 1, end):
+        if flat[index] in target[-3:]:
+            end = index + 1
+    return start, max(start + 1, end)
 
 
 def _editorial_dict(value):
@@ -99,7 +131,6 @@ def _asset_relevance(asset: dict, sentence_terms: set[str], role: str) -> float:
 
 
 def _asset_score(asset: dict, sentence_terms: set[str], role: str, reuse_count: int = 0, previous_id: str = "") -> float:
-    """Rank strong candidates while making repetition a secondary concern."""
     score = _asset_relevance(asset, sentence_terms, role)
     score -= min(max(0, reuse_count) * 2.0, 6.0)
     if previous_id and str(asset.get("id")) == previous_id:
@@ -120,13 +151,13 @@ def build_shots(beat, seed=42, aligned_words=None, sentences_override=None):
         intent, reason, intensity = classify(sentence)
         if aligned_words:
             start_word, end_word = _span(sentence, aligned_words, position)
-            position = max(position, end_word)
+            position = max(position + 1, end_word)
             start = max(0.0, float(aligned_words[start_word]["start"]) - float(beat["start"])) if start_word < len(aligned_words) else 0.0
             end = min(total, float(aligned_words[end_word - 1]["end"]) - float(beat["start"])) if end_word > start_word else start + 0.5
         else:
             start = shots[-1]["end"] if shots else 0.0
             end = start + max(0.45, total / max(1, len(sentence_list)))
-        start = min(total - 0.25, max(0.0, start))
+        start = min(max(0.0, total - 0.25), max(0.0, start))
         end = total if index == len(sentence_list) - 1 else min(total, max(start + 0.25, end))
         if end <= start:
             end = min(total, start + 0.25)
@@ -144,13 +175,8 @@ def build_shots(beat, seed=42, aligned_words=None, sentences_override=None):
         layers = []
         chosen = None
         if assets:
-            eligible = [
-                asset for asset in assets
-                if _asset_relevance(asset, terms, role) >= MIN_VISUAL_RELEVANCE
-            ]
+            eligible = [asset for asset in assets if _asset_relevance(asset, terms, role) >= MIN_VISUAL_RELEVANCE]
             if not eligible:
-                # Never fill a weak sentence match with random stock footage. A
-                # role-specific generated/document visual is safer than irrelevant b-roll.
                 eligible = [
                     asset for asset in assets
                     if str(asset.get("kind", "")).lower() in {"generated", "document"}
