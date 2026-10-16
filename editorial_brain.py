@@ -37,8 +37,11 @@ def _normalize_token(token: str) -> str:
     token = token.lower()
     if len(token) > 5 and token.endswith("ies"):
         return token[:-3] + "y"
-    if len(token) > 5 and token.endswith("es") and token[:-2].endswith(("s", "x", "z", "ch", "sh")):
-        return token[:-2]
+    if token.endswith("es") and len(token) > 4:
+        stem = token[:-2]
+        if stem.endswith(("s", "x", "z", "ch", "sh")):
+            return stem
+        return token[:-1]
     if len(token) > 4 and token.endswith("s") and not token.endswith("ss"):
         return token[:-1]
     return token
