@@ -38,6 +38,23 @@ def keywords(sentence: str) -> list[str]:
     return list(dict.fromkeys(word.lower() for word in words if word.lower() not in STOP))[:8]
 
 
+def _value_label(sentence: str) -> str:
+    """Create the compact evidence/value labels seen in the reference style."""
+    numbers = re.findall(r"(?:\$|€|£)?\d+(?:[,.]\d+)*(?:%|\s*(?:million|billion|trillion|thousand|M|B|T))?", sentence, re.I)
+    if not numbers:
+        return ""
+    cue = re.search(r"\b(total|cost|costs|worth|value|price|spent|spending|estimated|estimate|budget|valued|reached|sold|sold for)\b", sentence, re.I)
+    if not cue:
+        return ""
+    label = numbers[0].replace(",", "")
+    prefix = cue.group(1).upper()
+    if prefix in {"COSTS", "SPENT", "SPENDING"}:
+        prefix = "COST"
+    elif prefix in {"ESTIMATED", "ESTIMATE", "VALUED"}:
+        prefix = "ESTIMATE"
+    return f"{prefix} = {label}"[:44]
+
+
 def _span(sentence, words, position):
     target = re.findall(r"[a-z0-9]+", sentence.lower())
     flat = [re.sub(r"[^a-z0-9]", "", str(word.get("word", "")).lower()) for word in words]
@@ -163,20 +180,28 @@ def build_shots(beat, seed=42, aligned_words=None, sentences_override=None):
                     "rotation": 0, "opacity": 1, "z": 0, "animation": motion,
                 })
 
-        important = [word for word in keywords(sentence) if len(word) >= 5]
+        value_label = _value_label(sentence)
         overlay = str(decision.get("overlay") or decision.get("text_overlay") or "").strip()
         if overlay:
             layers.append({
                 "id": f"overlay-{index}", "kind": "label", "text": overlay[:54],
                 "x": 6, "y": 7, "width": 48, "height": 7,
-                "rotation": 0, "opacity": 0.92, "z": 5, "animation": "static",
+                "rotation": 0, "opacity": 0.94, "z": 5, "animation": "static",
             })
-        elif reason == "reveal" and important and len(sentence) < 105:
+        elif value_label:
             layers.append({
-                "id": f"reveal-{index}", "kind": "text", "text": important[-1].upper(),
-                "x": 7, "y": 70, "width": 70, "height": 16,
-                "rotation": 0, "opacity": 0.94, "z": 5, "animation": "push",
+                "id": f"value-{index}", "kind": "label", "text": value_label,
+                "x": 6, "y": 8, "width": 54, "height": 8,
+                "rotation": 0, "opacity": 0.96, "z": 5, "animation": "push",
             })
+        elif reason == "reveal":
+            important = [word for word in keywords(sentence) if len(word) >= 5]
+            if important and len(sentence) < 105:
+                layers.append({
+                    "id": f"reveal-{index}", "kind": "text", "text": important[-1].upper(),
+                    "x": 7, "y": 70, "width": 70, "height": 16,
+                    "rotation": 0, "opacity": 0.94, "z": 5, "animation": "push",
+                })
 
         actions = [{"type": "zoom" if intensity > 0.72 else "pan", "at": 0.12, "duration": min(0.8, max(0.2, (end - start) * 0.45)), "intensity": min(0.7, intensity * 0.45), "reason": "pace"}]
         if reason == "reveal":
