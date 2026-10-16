@@ -37,7 +37,7 @@ def _normalize_token(token: str) -> str:
     token = token.lower()
     if len(token) > 5 and token.endswith("ies"):
         return token[:-3] + "y"
-    if len(token) > 4 and token.endswith("es"):
+    if len(token) > 5 and token.endswith("es") and token[:-2].endswith(("s", "x", "z", "ch", "sh")):
         return token[:-2]
     if len(token) > 4 and token.endswith("s") and not token.endswith("ss"):
         return token[:-1]
@@ -249,8 +249,6 @@ def build_shots(beat, seed=42, aligned_words=None, sentences_override=None):
             "layers": layers, "actions": actions, "sfx": [], "intensity": round(intensity, 2),
         })
 
-    # Audio alignment can contain pauses between sentences. Keep the documentary
-    # visually continuous by letting the preceding shot hold through those pauses.
     if shots:
         shots[0]["start"] = 0.0
         for index in range(1, len(shots)):
