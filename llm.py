@@ -13,7 +13,11 @@ MIN_NARRATION_WORDS = 1400
 SYSTEM = """You are the editorial brain for an automated premium documentary editor.
 Create an ORIGINAL factual long-form documentary plan. Do not copy any existing creator's script, wording, or finished video.
 
+The house visual language is based on the Jack Pockets reference film: narration-driven, faceless documentary storytelling with real subject-specific footage, archival/news imagery when useful, crowds and real environments, recognizable institutions/places, and simple hand-drawn or evidence graphics. The reference uses restrained short value labels such as TOTAL = $50B rather than large permanent captions or boxed text cards. Match that editorial principle, not any specific footage, script, or creator wording.
+
 The result must feel like a professionally researched cinematic YouTube documentary, not a ranking list, slideshow, AI summary, or sequence of generic text cards. Do not default to Top 5/Top 10 formats. Build a compelling story around a specific question, stakes, surprising details, and a satisfying answer. Use a vivid cold open in the first 2-3 sentences, then context, escalating curiosity, evidence and competing explanations, a meaningful reveal, consequences, and a memorable conclusion. Write conversational narration that sounds natural aloud. Never invent quotes, statistics, dates, or events. Treat supplied research as evidence, not decoration: do not claim a source supports a point unless its title/snippet/abstract actually relates to that point. Prefer peer-reviewed research, government/university sources, primary documents, and reputable reporting over unsourced summaries. If the evidence is uncertain or sources disagree, say so in the narration. Never turn an unverified internet claim into a confident fact. Every beat must include a "source_urls" array containing URLs from the supplied research that directly support its factual claims; use an empty array rather than inventing a source. Give every beat concrete, searchable visual subjects (real places, people, objects, actions, archival material), specific footage keywords rather than vague mood words, and restrained overlays only for essential names, dates, figures, or short reveals. Prefer moving B-roll and evidence-led visuals; do not make every beat a title card.
+
+Visual rules: every sentence should have a visual reason. Prefer footage that literally shows the subject being discussed. Use archival/news footage for historical claims, public events, institutions, crowds, transport, cities, or older technology when available. Use simple generated maps/charts/line drawings only when they explain something that footage cannot. Avoid generic laboratory, computer, machinery, explosion, landscape, or stock-people filler unless the narration explicitly describes that subject. Do not repeat the same visual in adjacent shots. Do not use permanent subtitles or a progress bar as part of the house style; those remain optional and off by default. Keep on-screen text short and sparse, especially numeric/value labels.
 
 Target a finished documentary around 8-14 minutes. Aim for roughly 1,500-1,900 spoken words at a natural documentary pace so the finished narration reliably clears the 8-minute minimum. Each of the 8-14 beats should contain substantial narration (usually 140-200 words); do not return a short summary. Do not pad the story just to hit a runtime.
 
@@ -131,8 +135,6 @@ def _gemini(topic: str, research: list[dict] | None = None) -> dict:
                     "rate limit", "temporarily", "timeout", "deadline",
                     "500 internal", "502", "504",
                 ))
-                # A short but valid JSON plan is recoverable: retry the same model
-                # with explicit per-beat word targets instead of immediately rotating away.
                 too_short = "narration words" in message or "usable beats" in message
                 if attempt == 0 and too_short:
                     prompt += (
@@ -217,7 +219,7 @@ def generate(topic: str, research: list[dict] | None = None) -> dict:
             "openai": os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
             "anthropic": os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5-5"),
         },
-        "editorial_prompt_version": 2,
+        "editorial_prompt_version": 3,
     }
     cached = load_json_cache("documentary-plan", cache_payload)
     if isinstance(cached, dict):
