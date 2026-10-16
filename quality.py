@@ -3,12 +3,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-
 BANNED_GENERATED_ROLES = {"b-roll", "photo", "texture", "archival photo"}
 MAX_VISUAL_REUSE = 4
 MAX_GENERATED_RATIO = 0.40
-MIN_REAL_VIDEO_CLIPS = 4
-MIN_REAL_SHOT_RATIO = 0.55
+MAX_PHOTO_RATIO = 0.15
+MIN_REAL_VIDEO_CLIPS = 6
+MIN_VIDEO_SHOT_RATIO = 0.70
+MAX_STATIC_RUN = 1
 MAX_COVERAGE_GAP = 0.35
 
 
@@ -32,7 +33,6 @@ def validate(path: str) -> list[str]:
         errors.append("output must be 30fps to match the reference cadence and reduce render cost")
     if (manifest.get("width"), manifest.get("height")) != (1920, 1080):
         errors.append("output must be 1920x1080")
-
     duration = _as_float(manifest.get("duration"))
     if duration < 480:
         errors.append(f"documentary is under 8 minutes ({duration:.1f}s)")
@@ -49,10 +49,12 @@ def validate(path: str) -> list[str]:
 
     asset_index: dict[str, dict] = {}
     selected_asset_counts: dict[str, int] = {}
-    real_shots = 0
     total_shots = 0
+    video_shots = 0
+    photo_shots = 0
     generated_shots = 0
     consecutive_same = 0
+    static_run = 0
     previous_asset = ""
     all_manifest_sources = {str(url) for url in (manifest.get("sources") or []) if url}
 
@@ -67,22 +69,31 @@ def validate(path: str) -> list[str]:
                     errors.append(f"evidence gate: empty source URL in {beat_id}")
                 elif all_manifest_sources and str(url) not in all_manifest_sources:
                     errors.append(f"evidence gate: beat source is missing from manifest sources: {beat_id}")
-
         for asset in beat.get("assets", []):
             asset_id = str(asset.get("id") or "")
             if asset_id:
                 asset_index[asset_id] = asset
-
         for shot in beat.get("shots", []):
             total_shots += 1
             ids = [str(x) for x in shot.get("assetIds", []) if x]
             for asset_id in ids:
                 selected_asset_counts[asset_id] = selected_asset_counts.get(asset_id, 0) + 1
             chosen = [asset_index.get(x, {}) for x in ids]
-            if any(a.get("kind") in {"video", "photo"} for a in chosen):
-                real_shots += 1
-            if any(a.get("kind") == "generated" for a in chosen):
-                generated_shots += 1
+            kinds = {str(a.get("kind", "")).lower() for a in chosen}
+            if "video" in kinds:
+                video_shots += 1
+                static_run = 0
+            elif kinds & {"photo", "generated", "document"}:
+                if "photo" in kinds:
+                    photo_shots += 1
+                if "generated" in kinds:
+                    generated_shots += 1
+                static_run += 1
+                if static_run > MAX_STATIC_RUN:
+                    errors.append(f"motion gate: more than {MAX_STATIC_RUN} consecutive static-image shots near {shot.get('id')}")
+            else:
+                static_run += 1
+            if "generated" in kinds:
                 for asset in chosen:
                     if asset.get("kind") == "generated" and str(asset.get("role", "")).lower() in BANNED_GENERATED_ROLES:
                         errors.append(f"graphics gate: generated filler role is not allowed ({asset.get('id')})")
@@ -103,22 +114,18 @@ def validate(path: str) -> list[str]:
     selected_videos = {str(a.get("id")) for a in selected_assets if a.get("kind") == "video"}
     if len(selected_videos) < MIN_REAL_VIDEO_CLIPS:
         errors.append(f"footage gate: only {len(selected_videos)} distinct real video clips selected; need at least {MIN_REAL_VIDEO_CLIPS}")
-
-    real_ratio = real_shots / max(1, total_shots)
-    if real_ratio < MIN_REAL_SHOT_RATIO:
-        errors.append(f"footage gate: only {real_ratio:.0%} of shots use real stock video/photos; need at least {MIN_REAL_SHOT_RATIO:.0%}")
-
+    video_ratio = video_shots / max(1, total_shots)
+    if video_ratio < MIN_VIDEO_SHOT_RATIO:
+        errors.append(f"motion gate: only {video_ratio:.0%} of shots use moving video; need at least {MIN_VIDEO_SHOT_RATIO:.0%}")
+    photo_ratio = photo_shots / max(1, total_shots)
+    if photo_ratio > MAX_PHOTO_RATIO:
+        errors.append(f"static-image gate: photos fill {photo_ratio:.0%} of shots; maximum is {MAX_PHOTO_RATIO:.0%}")
     generated_ratio = generated_shots / max(1, total_shots)
     if generated_ratio > MAX_GENERATED_RATIO:
         errors.append(f"graphics gate: generated graphics fill {generated_ratio:.0%} of shots; maximum is {MAX_GENERATED_RATIO:.0%}")
-
     if consecutive_same > 0:
         errors.append(f"repetition gate: {consecutive_same} consecutive shots reuse the same visual")
-
-    heavy_reuse = sorted(
-        ((count, asset_id) for asset_id, count in selected_asset_counts.items() if count > MAX_VISUAL_REUSE),
-        reverse=True,
-    )
+    heavy_reuse = sorted(((count, asset_id) for asset_id, count in selected_asset_counts.items() if count > MAX_VISUAL_REUSE), reverse=True)
     if heavy_reuse:
         details = ", ".join(f"{asset_id}×{count}" for count, asset_id in heavy_reuse[:3])
         errors.append(f"repetition gate: a visual is reused more than {MAX_VISUAL_REUSE} times ({details})")
@@ -168,7 +175,6 @@ def validate(path: str) -> list[str]:
                 errors.append(f"visual coverage gap at beat start: {beat_id}")
             if beat_duration - _as_float(shots[-1].get("end")) > MAX_COVERAGE_GAP:
                 errors.append(f"visual coverage gap at beat end: {beat_id}")
-
     if duration > 0 and beats and abs(_as_float(beats[-1].get("end")) - duration) > 0.5:
         errors.append("manifest duration does not match final beat")
     return sorted(set(errors))
