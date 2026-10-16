@@ -7,7 +7,11 @@ STOP = {
     "is", "was", "are", "were", "this", "that", "it", "as", "at", "by", "from",
     "into", "about", "then", "than", "they", "their", "there", "which", "what",
     "when", "where", "who", "how", "why", "its", "his", "her", "has", "have",
+    "most", "more", "very", "really", "thing", "things", "ever", "one", "ones",
+    "people", "person", "time", "way", "like", "just", "can", "could", "would",
+    "should", "will", "do", "does", "did", "not", "no", "yes", "than",
 }
+MIN_VISUAL_RELEVANCE = 7.0
 
 
 def sentences(text: str) -> list[str]:
@@ -55,34 +59,34 @@ def _tokens(value) -> set[str]:
     return set(re.findall(r"[a-z0-9]+", str(value or "").lower())) - STOP
 
 
-def _asset_score(asset: dict, sentence_terms: set[str], role: str, reuse_count: int = 0) -> float:
-    """Score actual asset metadata against this sentence; novelty is only a tie-breaker."""
+def _asset_relevance(asset: dict, sentence_terms: set[str], role: str) -> float:
     metadata_terms: set[str] = set()
     for field in ("title", "description", "tags"):
         metadata_terms.update(_tokens(asset.get(field, "")))
 
-    # Do not score asset["query"] or asset["keywords"]: the pipeline copies the
-    # same beat-level search terms onto every result, which falsely makes all clips
-    # appear equally relevant to every sentence in that beat.
     overlap = sentence_terms & metadata_terms
     score = len(overlap) * 6.0
     kind = str(asset.get("kind", "")).lower()
     asset_role = str(asset.get("role", "")).lower()
-
-    # Relevance dominates variety: a relevant repeat is better than an unrelated
-    # fresh clip, but repeated use is discouraged when similarly relevant options exist.
     if kind == "video":
         score += 2.0
     elif kind == "photo":
         score += 1.0
     elif kind in {"generated", "document"}:
         score -= 2.0
-    score -= min(max(0, reuse_count) * 2.0, 6.0)
-
     if role in {"map", "document", "screenshot", "chart"} and asset_role == role:
         score += 1.0
     if role in {"map", "document", "screenshot", "chart"} and kind == "generated" and role in str(asset.get("id", "")).lower():
         score += 0.5
+    return score
+
+
+def _asset_score(asset: dict, sentence_terms: set[str], role: str, reuse_count: int = 0, previous_id: str = "") -> float:
+    """Rank strong candidates while making repetition a secondary concern."""
+    score = _asset_relevance(asset, sentence_terms, role)
+    score -= min(max(0, reuse_count) * 2.0, 6.0)
+    if previous_id and str(asset.get("id")) == previous_id:
+        score -= 3.5
     return score
 
 
@@ -93,6 +97,7 @@ def build_shots(beat, seed=42, aligned_words=None, sentences_override=None):
     shots = []
     position = 0
     used_counts: dict[str, int] = {}
+    previous_asset_id = ""
 
     for index, sentence in enumerate(sentence_list):
         intent, reason, intensity = classify(sentence)
@@ -122,29 +127,42 @@ def build_shots(beat, seed=42, aligned_words=None, sentences_override=None):
         layers = []
         chosen = None
         if assets:
-            ranked = sorted(
-                assets,
-                key=lambda asset: (
-                    _asset_score(asset, terms, role, used_counts.get(str(asset["id"]), 0)),
-                    str(asset.get("kind", "")).lower() == "video",
-                    str(asset["id"]),
-                ),
-                reverse=True,
-            )
-            chosen = ranked[0]
-            used_counts[str(chosen["id"])] = used_counts.get(str(chosen["id"]), 0) + 1
-            asset_id = str(chosen["id"])
-            if role in {"document", "screenshot", "chart", "map"} and chosen.get("kind") == "generated":
-                x, y, width, height = 5, 8, 90, 78
-            else:
-                x, y, width, height = 0, 0, 100, 100
-            layers.append({
-                "id": f"visual-{index}", "kind": "image", "assetId": asset_id,
-                "x": x, "y": y, "width": width, "height": height,
-                "rotation": 0, "opacity": 1, "z": 0, "animation": motion,
-            })
+            eligible = [
+                asset for asset in assets
+                if _asset_relevance(asset, terms, role) >= MIN_VISUAL_RELEVANCE
+            ]
+            if not eligible:
+                # Never fill a weak sentence match with random stock footage. A
+                # role-specific generated/document visual is safer than irrelevant b-roll.
+                eligible = [
+                    asset for asset in assets
+                    if str(asset.get("kind", "")).lower() in {"generated", "document"}
+                    and str(asset.get("role", "")).lower() == role
+                ]
+            if eligible:
+                ranked = sorted(
+                    eligible,
+                    key=lambda asset: (
+                        _asset_score(asset, terms, role, used_counts.get(str(asset["id"]), 0), previous_asset_id),
+                        str(asset.get("kind", "")).lower() == "video",
+                        str(asset["id"]),
+                    ),
+                    reverse=True,
+                )
+                chosen = ranked[0]
+                used_counts[str(chosen["id"])] = used_counts.get(str(chosen["id"]), 0) + 1
+                previous_asset_id = str(chosen["id"])
+                asset_id = str(chosen["id"])
+                if role in {"document", "screenshot", "chart", "map"} and chosen.get("kind") == "generated":
+                    x, y, width, height = 5, 8, 90, 78
+                else:
+                    x, y, width, height = 0, 0, 100, 100
+                layers.append({
+                    "id": f"visual-{index}", "kind": "image", "assetId": asset_id,
+                    "x": x, "y": y, "width": width, "height": height,
+                    "rotation": 0, "opacity": 1, "z": 0, "animation": motion,
+                })
 
-        # Keep on-screen text deliberate: no repeated keyword stickers or generic evidence labels.
         important = [word for word in keywords(sentence) if len(word) >= 5]
         overlay = str(decision.get("overlay") or decision.get("text_overlay") or "").strip()
         if overlay:
