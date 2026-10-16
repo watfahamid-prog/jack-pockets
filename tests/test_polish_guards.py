@@ -89,6 +89,13 @@ class PolishGuardsTests(unittest.TestCase):
         self.assertIn("factory", terms)
         self.assertIn("bridge", terms)
 
+    def test_sentence_keywords_normalize_es_plurals(self):
+        terms = keywords("Boxes, classes, watches and buses")
+        self.assertIn("box", terms)
+        self.assertIn("class", terms)
+        self.assertIn("watch", terms)
+        self.assertIn("bus", terms)
+
     def test_build_shots_fills_alignment_pauses(self):
         beat = {
             "id": "beat-1",
