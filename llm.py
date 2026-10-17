@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 MIN_NARRATION_WORDS = 1400
+MIN_BEAT_KEYWORDS = 2
 
 SYSTEM = """You are the editorial brain for an automated premium documentary editor.
 Create an ORIGINAL factual long-form documentary plan. Do not copy any existing creator's script, wording, or finished video.
@@ -23,7 +24,8 @@ Target a finished documentary around 8-14 minutes. Aim for roughly 1,500-1,900 s
 
 Use a strong narrative arc: cinematic cold-open, context, escalation, evidence and competing explanations, reveal, fallout, and a memorable ending. Every beat must advance the story. Every sentence should have a visual reason, and factual claims should be specific enough to research.
 
-Return ONLY valid JSON with 8-14 beats. Each beat needs a concise title, narration, intensity 0-1, keywords, overlays, and visual intent. Narration must be detailed, natural, and original. Do not write placeholder narration, repeated filler, or generic one-line beats. Do not wrap the JSON in Markdown fences. Do not add commentary before or after the JSON."""
+Return ONLY valid JSON with 8-14 beats. Each beat needs a concise title, narration, intensity 0-1, at least 2 specific searchable keywords, source_urls, and visual intent. Narration must be detailed, natural, and original. Do not write placeholder narration, repeated filler, or generic one-line beats. Do not wrap the JSON in Markdown fences. Do not add commentary before or after the JSON."""
+
 
 def _parse_json(text: str):
     raw = str(text or "").strip()
@@ -48,6 +50,7 @@ def _parse_json(text: str):
                 continue
         raise ValueError(f"LLM returned invalid JSON: {first_error.msg} at line {first_error.lineno} column {first_error.colno}") from first_error
 
+
 def _normalize_plan(value, topic: str) -> dict:
     if isinstance(value, list):
         plan = {"title": topic, "beats": value}
@@ -71,11 +74,62 @@ def _normalize_plan(value, topic: str) -> dict:
     valid_beats = [beat for beat in plan["beats"] if isinstance(beat, dict) and str(beat.get("narration", "")).strip()]
     if len(valid_beats) < 8:
         raise ValueError(f"LLM returned only {len(valid_beats)} usable beats; need at least 8")
-    plan["beats"] = valid_beats
-    words = sum(len(str(beat.get("narration", "")).split()) for beat in valid_beats)
+
+    normalized = []
+    for index, beat in enumerate(valid_beats, start=1):
+        item = dict(beat)
+        item["title"] = str(item.get("title") or f"Chapter {index}").strip()
+        item["narration"] = str(item.get("narration", "")).strip()
+        try:
+            item["intensity"] = min(1.0, max(0.0, float(item.get("intensity", 0.5))))
+        except (TypeError, ValueError):
+            item["intensity"] = 0.5
+        raw_keywords = item.get("keywords", [])
+        if isinstance(raw_keywords, str):
+            raw_keywords = re.split(r"[,;|]", raw_keywords)
+        item["keywords"] = list(dict.fromkeys(
+            str(keyword).strip().lower()
+            for keyword in raw_keywords or []
+            if str(keyword).strip()
+        ))[:10]
+        raw_sources = item.get("source_urls", [])
+        if isinstance(raw_sources, str):
+            raw_sources = [raw_sources]
+        item["source_urls"] = list(dict.fromkeys(
+            str(url).strip() for url in raw_sources or [] if str(url).strip()
+        ))
+        item["overlays"] = item.get("overlays") if isinstance(item.get("overlays"), list) else []
+        item["visual_intent"] = str(item.get("visual_intent") or item.get("visual") or "").strip()
+        item["editorial"] = item.get("editorial") if isinstance(item.get("editorial"), dict) else {}
+        normalized.append(item)
+
+    plan["beats"] = normalized
+    words = sum(len(str(beat.get("narration", "")).split()) for beat in normalized)
     if words < MIN_NARRATION_WORDS:
         raise ValueError(f"LLM returned only {words} narration words; a long-form plan needs at least {MIN_NARRATION_WORDS}")
+
+    weak_keywords = [
+        str(beat.get("title", f"beat-{index}"))
+        for index, beat in enumerate(normalized, start=1)
+        if len(beat.get("keywords", [])) < MIN_BEAT_KEYWORDS
+    ]
+    if weak_keywords:
+        raise ValueError(
+            "beats need at least 2 specific searchable keywords: " + ", ".join(weak_keywords[:4])
+        )
+
+    sentences = []
+    for beat in normalized:
+        sentences.extend(
+            part.strip().lower()
+            for part in re.split(r"(?<=[.!?])\s+", beat["narration"])
+            if part.strip()
+        )
+    duplicate_count = len(sentences) - len(set(sentences))
+    if sentences and duplicate_count / len(sentences) > 0.12:
+        raise ValueError("LLM repeated too much narration; regenerate a more original story")
     return plan
+
 
 def _research_prompt(topic: str, research: list[dict] | None) -> str:
     safe_sources = []
@@ -95,6 +149,7 @@ def _research_prompt(topic: str, research: list[dict] | None) -> str:
         + "\n\nReturn source_urls on every beat, using only exact URLs listed above. "
           "When this material is insufficient, keep the claim modest or omit it; never fabricate citations."
     )
+
 
 def _gemini(topic: str, research: list[dict] | None = None) -> dict:
     from google import genai
@@ -138,10 +193,11 @@ def _gemini(topic: str, research: list[dict] | None = None) -> dict:
                 too_short = "narration words" in message or "usable beats" in message
                 if attempt == 0 and too_short:
                     prompt += (
-                        "\\n\\nLENGTH REPAIR — your previous response was too short. "
+                        "\n\nLENGTH REPAIR — your previous response was too short. "
                         "Return a complete revised JSON plan, not a summary. Include 10-12 beats, "
                         "each with about 150-190 words of narration, for at least 1,500 spoken words "
                         "total. Keep claims tied to supplied research, retain exact source URLs, "
+                        "provide at least 2 specific searchable keywords per beat, "
                         "and do not pad with repeated ideas. Output JSON only."
                     )
                     print(
@@ -174,6 +230,7 @@ def _gemini(topic: str, research: list[dict] | None = None) -> dict:
         + str(last_error)
     ) from last_error
 
+
 def _openai(topic: str, research: list[dict] | None = None) -> dict:
     from openai import OpenAI
     client = OpenAI()
@@ -188,6 +245,7 @@ def _openai(topic: str, research: list[dict] | None = None) -> dict:
     )
     return _normalize_plan(_parse_json(response.choices[0].message.content), topic)
 
+
 def _anthropic(topic: str, research: list[dict] | None = None) -> dict:
     from anthropic import Anthropic
     client = Anthropic()
@@ -198,6 +256,7 @@ def _anthropic(topic: str, research: list[dict] | None = None) -> dict:
         messages=[{"role": "user", "content": _research_prompt(topic, research)}],
     )
     return _normalize_plan(_parse_json(response.content[0].text), topic)
+
 
 def generate(topic: str, research: list[dict] | None = None) -> dict:
     from cache_utils import load_json_cache, save_json_cache
@@ -219,7 +278,7 @@ def generate(topic: str, research: list[dict] | None = None) -> dict:
             "openai": os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
             "anthropic": os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5-5"),
         },
-        "editorial_prompt_version": 3,
+        "editorial_prompt_version": 4,
     }
     cached = load_json_cache("documentary-plan", cache_payload)
     if isinstance(cached, dict):

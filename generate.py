@@ -18,6 +18,7 @@ from sfx import create_sound_effects
 from tts import synthesize
 
 PROFILES = {"youtube": {"width": 1920, "height": 1080, "fps": 30}}
+GENERATED_FILLER_ROLES = {"b-roll", "photo", "texture", "archival photo"}
 
 
 def slug(value: str) -> str:
@@ -43,8 +44,6 @@ def main() -> None:
     root.mkdir(parents=True, exist_ok=True)
 
     print(f"[pipeline] generating documentary: {args.topic}", flush=True)
-    # Research the subject before drafting, so the script is evidence-led rather than
-    # generated first and decorated with search results afterwards.
     try:
         topic_research = search_web(
             f"{args.topic} primary sources scientific studies official records reliable evidence",
@@ -68,14 +67,11 @@ def main() -> None:
             found = []
         beat["research"] = found
         verified_candidate_urls = _relevant_sources(args.topic, beat, found)
-        # Do not leave empty citations when relevant, beat-specific research exists;
-        # equally, do not attach unrelated search results just to fill the field.
         beat["source_urls"] = verified_candidate_urls
         if not verified_candidate_urls:
             print(f"[research] beat {index}: no sufficiently relevant source found; claims need review", flush=True)
         research.extend(found)
 
-    # Include both research gathered before writing and beat-specific follow-up sources.
     plan["sources"] = list(dict.fromkeys(
         str(x["url"]) for x in research if isinstance(x, dict) and x.get("url")
     ))
@@ -86,7 +82,6 @@ def main() -> None:
     audio = root / "narration.mp3"
     synthesize(narration, audio)
 
-    # These scripts live at repository root. Calling scripts/*.py was a guaranteed failure.
     alignment = root / "alignment.json"
     subprocess.run(
         [sys.executable, "audio_aligner.py", str(audio), "--out", str(alignment)],
@@ -104,8 +99,6 @@ def main() -> None:
         beat_keywords = [str(x).strip() for x in raw_keywords if str(x).strip()]
         narration_text = str(beat.get("narration", "")).strip()
         first_sentence = re.split(r"(?<=[.!?])\s+", narration_text)[0][:180]
-        # Model outputs sometimes put a whole SEO phrase in one keyword field.
-        # Flatten it and keep searches short enough for stock libraries to understand.
         keyword_tokens = []
         for keyword in beat_keywords:
             keyword_tokens.extend(re.findall(r"[a-zA-Z0-9]{3,}", keyword))
@@ -118,8 +111,6 @@ def main() -> None:
         for query in queries:
             asset_dir = root / f"assets-{index}"
             videos = []
-            # Start with the highest-yield provider, then diversify if we have too few
-            # moving shots. This avoids accepting the first weak result as "good enough".
             providers = [
                 ("Pexels", lambda: search_pexels_videos(query, asset_dir, limit=4)),
                 ("Pixabay", lambda: search_pixabay_videos(query, asset_dir, limit=3)),
@@ -134,9 +125,6 @@ def main() -> None:
                 except Exception as exc:
                     print(f"[assets] {provider_name} video search failed for beat {index + 1}: {exc}", flush=True)
                     found = []
-                # Filter each provider's results BEFORE deciding whether to stop searching.
-                # Otherwise two irrelevant Pexels hits can prevent Pixabay/Commons/Archive
-                # from ever being queried, leaving the beat with generated graphics only.
                 for item in found:
                     relevant, matched_terms = _asset_relevance(query, beat, item)
                     if not relevant:
@@ -149,12 +137,10 @@ def main() -> None:
                         continue
                     if item.get("id") and item["id"] not in {x.get("id") for x in videos}:
                         videos.append(item)
-                # Only stop searching when we have enough relevant moving candidates.
                 if len(videos) >= 2:
                     break
 
             candidates = videos
-            # Photos are a last resort; never let one photo search replace available motion footage.
             if not candidates:
                 photo_providers = [
                     ("Pexels", lambda: search_pexels(query, asset_dir, limit=3)),
@@ -179,19 +165,12 @@ def main() -> None:
                             )
                             continue
                         candidates.append(item)
-                    # Continue to the next provider if this provider only returned unrelated photos.
                     if candidates:
                         break
 
             for item in candidates:
                 relevant, matched_terms = _asset_relevance(query, beat, item)
                 if not relevant:
-                    print(
-                        f"[assets] rejected unrelated result provider={item.get('license', 'unknown')} "
-                        f"beat={index + 1} title={str(item.get('title', ''))[:100]!r} "
-                        f"matched={matched_terms}",
-                        flush=True,
-                    )
                     continue
                 asset_id = str(item.get("id", ""))
                 if asset_id and asset_id in used_asset_ids:
@@ -206,9 +185,19 @@ def main() -> None:
                 item["src"] = public_path(Path(item["src"]))
                 stock_assets.append(item)
 
+        # Generated graphics are explanatory evidence layers, not substitutes for footage.
+        # Never manufacture fake "b-roll"/photo/texture/archival imagery just to satisfy a shot.
         for offset, role_plan in enumerate(make_asset_plan(narration_text, beat.get("editorial") or {})):
+            role = str(role_plan.get("role", "")).strip().lower()
+            if role in GENERATED_FILLER_ROLES:
+                print(
+                    f"[assets] skipped generated filler role={role!r} beat={index + 1}; "
+                    "the quality gate requires real footage for b-roll roles",
+                    flush=True,
+                )
+                continue
             item = generate_role_asset(
-                role_plan["role"],
+                role,
                 narration_text,
                 root / "generated",
                 beat.get("research", []),
@@ -232,8 +221,6 @@ def main() -> None:
     build(plan, public_path(audio), words, asset_sets, PROFILES[args.profile], manifest_path)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
-    # Add restrained, original sound accents only to motivated reveals/consequences.
-    # These are generated locally, so no SFX API key or external licence is required.
     sound_effects = create_sound_effects(root / "sfx")
     for beat in manifest.get("beats", []):
         candidates = [
@@ -283,7 +270,6 @@ def main() -> None:
     if errors:
         raise SystemExit("QUALITY GATE FAILED:\n" + "\n".join(errors))
 
-    # Remotion expects the component props shape { "manifest": ... }, not the raw manifest.
     props_path = root / "render-props.json"
     props_path.write_text(json.dumps({"manifest": manifest}, indent=2), encoding="utf-8")
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
@@ -303,7 +289,6 @@ def main() -> None:
         check=True,
     )
 
-    # Validate the encoded MP4 itself, not just the source manifest.
     if not out.exists() or out.stat().st_size < 100_000:
         raise RuntimeError(f"Render produced no usable MP4: {out}")
     probe = subprocess.run(

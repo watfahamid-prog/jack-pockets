@@ -12,6 +12,7 @@ STOP = {
     "should", "will", "do", "does", "did", "not", "no", "yes",
 }
 MIN_VISUAL_RELEVANCE = 7.0
+STATIC_ROLES = {"map", "document", "screenshot", "chart"}
 
 
 def sentences(text: str) -> list[str]:
@@ -33,24 +34,30 @@ def classify(sentence: str):
     return "setup", "setup", 0.48
 
 
+def _normalize_token(token: str) -> str:
+    token = token.lower()
+    if len(token) > 5 and token.endswith("ies"):
+        return token[:-3] + "y"
+    if token.endswith("es") and len(token) > 4:
+        stem = token[:-2]
+        if stem.endswith(("s", "x", "z", "ch", "sh")):
+            return stem
+        return token[:-1]
+    if len(token) > 4 and token.endswith("s") and not token.endswith("ss"):
+        return token[:-1]
+    return token
+
+
 def keywords(sentence: str) -> list[str]:
     words = re.findall(r"[A-Za-z0-9][A-Za-z0-9'’-]{2,}", sentence)
-    return list(dict.fromkeys(word.lower() for word in words if word.lower() not in STOP))[:8]
+    return list(dict.fromkeys(_normalize_token(word) for word in words if word.lower() not in STOP))[:8]
 
 
 def _value_label(sentence: str) -> str:
-    numbers = re.findall(
-        r"(?:\$|€|£)?\d+(?:[,.]\d+)*(?:%|\s*(?:million|billion|trillion|thousand|M|B|T))?",
-        sentence,
-        re.I,
-    )
+    numbers = re.findall(r"(?:\$|€|£)?\d+(?:[,.]\d+)*(?:%|\s*(?:million|billion|trillion|thousand|M|B|T))?", sentence, re.I)
     if not numbers:
         return ""
-    cue = re.search(
-        r"\b(total|cost|costs|worth|value|price|spent|spending|estimated|estimate|budget|valued|reached|sold|sold for)\b",
-        sentence,
-        re.I,
-    )
+    cue = re.search(r"\b(total|cost|costs|worth|value|price|spent|spending|estimated|estimate|budget|valued|reached|sold|sold for)\b", sentence, re.I)
     if not cue:
         return ""
     label = numbers[0].replace(",", "")
@@ -63,19 +70,13 @@ def _value_label(sentence: str) -> str:
 
 
 def _span(sentence, words, position):
-    """Map a sentence onto aligned words, with a safe sequential fallback."""
-    target = re.findall(r"[a-z0-9]+", sentence.lower())
-    flat = [re.sub(r"[^a-z0-9]", "", str(word.get("word", "")).lower()) for word in words]
+    target = [_normalize_token(token) for token in re.findall(r"[a-z0-9]+", sentence.lower())]
+    flat = [_normalize_token(re.sub(r"[^a-z0-9]", "", str(word.get("word", "")).lower())) for word in words]
     if not target or position >= len(flat):
         return position, min(len(words), position + max(1, len(target)))
-
-    # Exact contiguous match is best.
     for index in range(position, max(position, len(flat) - len(target) + 1)):
         if flat[index:index + len(target)] == target:
             return index, index + len(target)
-
-    # Whisper punctuation/casing can prevent an exact match. Anchor on the first
-    # distinctive token, then take a bounded span through the last matching token.
     anchors = [token for token in target if token not in STOP]
     start = None
     for token in anchors or target:
@@ -85,10 +86,7 @@ def _span(sentence, words, position):
         except ValueError:
             continue
     if start is None:
-        # Last-resort sequential allocation. Crucially, advance the cursor instead
-        # of repeatedly returning the same 0.0 start time for later sentences.
         return position, min(len(words), position + max(1, len(target)))
-
     end = min(len(flat), start + max(1, len(target) + 5))
     for index in range(start + 1, end):
         if flat[index] in target[-3:]:
@@ -105,14 +103,13 @@ def _editorial_dict(value):
 def _tokens(value) -> set[str]:
     if isinstance(value, (list, tuple, set)):
         value = " ".join(str(item) for item in value)
-    return set(re.findall(r"[a-z0-9]+", str(value or "").lower())) - STOP
+    return {_normalize_token(token) for token in re.findall(r"[a-z0-9]+", str(value or "").lower()) if token not in STOP}
 
 
 def _asset_relevance(asset: dict, sentence_terms: set[str], role: str) -> float:
     metadata_terms: set[str] = set()
     for field in ("title", "description", "tags"):
         metadata_terms.update(_tokens(asset.get(field, "")))
-
     overlap = sentence_terms & metadata_terms
     score = len(overlap) * 6.0
     kind = str(asset.get("kind", "")).lower()
@@ -123,18 +120,18 @@ def _asset_relevance(asset: dict, sentence_terms: set[str], role: str) -> float:
         score += 1.0
     elif kind in {"generated", "document"}:
         score -= 2.0
-    if role in {"map", "document", "screenshot", "chart"} and asset_role == role:
+    if role in STATIC_ROLES and asset_role == role:
         score += 1.0
-    if role in {"map", "document", "screenshot", "chart"} and kind == "generated" and role in str(asset.get("id", "")).lower():
+    if role in STATIC_ROLES and kind == "generated" and role in str(asset.get("id", "")).lower():
         score += 0.5
     return score
 
 
 def _asset_score(asset: dict, sentence_terms: set[str], role: str, reuse_count: int = 0, previous_id: str = "") -> float:
     score = _asset_relevance(asset, sentence_terms, role)
-    score -= min(max(0, reuse_count) * 2.0, 6.0)
+    score -= min(max(0, reuse_count) * 2.0, 8.0)
     if previous_id and str(asset.get("id")) == previous_id:
-        score -= 3.5
+        score -= 4.5
     return score
 
 
@@ -175,13 +172,30 @@ def build_shots(beat, seed=42, aligned_words=None, sentences_override=None):
         layers = []
         chosen = None
         if assets:
-            eligible = [asset for asset in assets if _asset_relevance(asset, terms, role) >= MIN_VISUAL_RELEVANCE]
-            if not eligible:
+            # Jack Pockets is footage-led: normal narration gets moving footage only.
+            # Static images are reserved for explicit evidence/map/chart/document roles.
+            relevant_videos = [
+                asset for asset in assets
+                if str(asset.get("kind", "")).lower() == "video"
+                and _asset_relevance(asset, terms, role) >= MIN_VISUAL_RELEVANCE
+            ]
+            if relevant_videos:
+                eligible = relevant_videos
+            elif role in STATIC_ROLES:
                 eligible = [
                     asset for asset in assets
-                    if str(asset.get("kind", "")).lower() in {"generated", "document"}
-                    and str(asset.get("role", "")).lower() == role
+                    if str(asset.get("kind", "")).lower() in {"photo", "generated", "document"}
+                    and _asset_relevance(asset, terms, role) >= MIN_VISUAL_RELEVANCE
                 ]
+                if not eligible:
+                    eligible = [
+                        asset for asset in assets
+                        if str(asset.get("kind", "")).lower() in {"generated", "document"}
+                        and str(asset.get("role", "")).lower() == role
+                    ]
+            else:
+                eligible = []
+
             if eligible:
                 ranked = sorted(
                     eligible,
@@ -196,7 +210,7 @@ def build_shots(beat, seed=42, aligned_words=None, sentences_override=None):
                 used_counts[str(chosen["id"])] = used_counts.get(str(chosen["id"]), 0) + 1
                 previous_asset_id = str(chosen["id"])
                 asset_id = str(chosen["id"])
-                if role in {"document", "screenshot", "chart", "map"} and chosen.get("kind") == "generated":
+                if role in STATIC_ROLES and chosen.get("kind") == "generated":
                     x, y, width, height = 5, 8, 90, 78
                 else:
                     x, y, width, height = 0, 0, 100, 100
@@ -209,35 +223,30 @@ def build_shots(beat, seed=42, aligned_words=None, sentences_override=None):
         value_label = _value_label(sentence)
         overlay = str(decision.get("overlay") or decision.get("text_overlay") or "").strip()
         if overlay:
-            layers.append({
-                "id": f"overlay-{index}", "kind": "label", "text": overlay[:54],
-                "x": 6, "y": 7, "width": 48, "height": 7,
-                "rotation": 0, "opacity": 0.94, "z": 5, "animation": "static",
-            })
+            layers.append({"id": f"overlay-{index}", "kind": "label", "text": overlay[:54], "x": 6, "y": 7, "width": 48, "height": 7, "rotation": 0, "opacity": 0.94, "z": 5, "animation": "static"})
         elif value_label:
-            layers.append({
-                "id": f"value-{index}", "kind": "label", "text": value_label,
-                "x": 6, "y": 8, "width": 54, "height": 8,
-                "rotation": 0, "opacity": 0.96, "z": 5, "animation": "push",
-            })
+            layers.append({"id": f"value-{index}", "kind": "label", "text": value_label, "x": 6, "y": 8, "width": 54, "height": 8, "rotation": 0, "opacity": 0.96, "z": 5, "animation": "push"})
         elif reason == "reveal":
             important = [word for word in keywords(sentence) if len(word) >= 5]
             if important and len(sentence) < 105:
-                layers.append({
-                    "id": f"reveal-{index}", "kind": "text", "text": important[-1].upper(),
-                    "x": 7, "y": 70, "width": 70, "height": 16,
-                    "rotation": 0, "opacity": 0.94, "z": 5, "animation": "push",
-                })
+                layers.append({"id": f"reveal-{index}", "kind": "text", "text": important[-1].upper(), "x": 7, "y": 70, "width": 70, "height": 16, "rotation": 0, "opacity": 0.94, "z": 5, "animation": "push"})
 
         actions = [{"type": "zoom" if intensity > 0.72 else "pan", "at": 0.12, "duration": min(0.8, max(0.2, (end - start) * 0.45)), "intensity": min(0.7, intensity * 0.45), "reason": "pace"}]
         if reason == "reveal":
             actions.append({"type": "flash", "at": 0.82, "duration": 0.07, "intensity": 0.16, "reason": "reveal"})
+        shots.append({"id": f"{beat['id']}-shot-{index}", "start": round(start, 3), "end": round(end, 3), "reason": reason, "intent": intent, "assetIds": [str(chosen["id"])] if chosen else [], "layers": layers, "actions": actions, "sfx": [], "intensity": round(intensity, 2)})
 
-        shots.append({
-            "id": f"{beat['id']}-shot-{index}", "start": round(start, 3), "end": round(end, 3),
-            "reason": reason, "intent": intent, "assetIds": [str(chosen["id"])] if chosen else [],
-            "layers": layers, "actions": actions, "sfx": [], "intensity": round(intensity, 2),
-        })
-
+    if shots:
+        shots[0]["start"] = 0.0
+        for index in range(1, len(shots)):
+            gap = float(shots[index]["start"]) - float(shots[index - 1]["end"])
+            if gap > 0:
+                shots[index - 1]["end"] = shots[index]["start"]
+            elif gap < 0:
+                shots[index]["start"] = shots[index - 1]["end"]
+        shots[-1]["end"] = round(total, 3)
+        for shot in shots:
+            shot["start"] = round(max(0.0, float(shot["start"])), 3)
+            shot["end"] = round(min(total, max(float(shot["start"]) + 0.2, float(shot["end"]))), 3)
     beat["shots"] = shots
     return beat
