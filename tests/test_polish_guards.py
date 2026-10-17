@@ -8,7 +8,7 @@ from quality import validate
 
 
 class PolishGuardsTests(unittest.TestCase):
-    def _manifest(self, *, shots=None, source_urls=None, assets=None):
+    def _manifest(self, *, shots=None, source_urls=None, assets=None, manifest_sources=None):
         shots = shots or [{
             "id": "beat-1-shot-0",
             "start": 0,
@@ -40,17 +40,23 @@ class PolishGuardsTests(unittest.TestCase):
             "duration": 480,
             "audioSrc": "runs/test/narration.mp3",
             "captions": [{"word": "documented", "start": 0, "end": 0.5}],
-            "sources": ["https://example.com/source"],
+            "sources": manifest_sources if manifest_sources is not None else ["https://example.com/source"],
             "beats": [beat],
         }
 
-    def test_rejects_missing_beat_evidence(self):
-        manifest = self._manifest(source_urls=[])
+    def _validate(self, manifest):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "manifest.json"
             path.write_text(json.dumps(manifest), encoding="utf-8")
-            errors = validate(str(path))
+            return validate(str(path))
+
+    def test_rejects_missing_beat_evidence(self):
+        errors = self._validate(self._manifest(source_urls=[]))
         self.assertTrue(any("no supporting source_urls" in error for error in errors))
+
+    def test_rejects_beat_source_missing_from_manifest_sources(self):
+        errors = self._validate(self._manifest(manifest_sources=[]))
+        self.assertTrue(any("missing from manifest sources" in error for error in errors))
 
     def test_rejects_visual_coverage_gap(self):
         manifest = self._manifest(shots=[
@@ -69,19 +75,62 @@ class PolishGuardsTests(unittest.TestCase):
                 "layers": [{"kind": "image", "assetId": "video-1"}],
             },
         ])
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "manifest.json"
-            path.write_text(json.dumps(manifest), encoding="utf-8")
-            errors = validate(str(path))
+        errors = self._validate(manifest)
         self.assertTrue(any("visual coverage gap" in error for error in errors))
 
     def test_rejects_missing_asset_provenance(self):
         manifest = self._manifest(assets=[{"id": "video-1", "kind": "video", "role": "b-roll"}])
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "manifest.json"
-            path.write_text(json.dumps(manifest), encoding="utf-8")
-            errors = validate(str(path))
+        errors = self._validate(manifest)
         self.assertTrue(any("provenance gate" in error for error in errors))
+
+    def test_rejects_static_broll_photo(self):
+        manifest = self._manifest(
+            assets=[{
+                "id": "photo-1",
+                "kind": "photo",
+                "role": "b-roll",
+                "source_url": "https://example.com/photo",
+                "license": "Test license",
+            }],
+            shots=[{
+                "id": "beat-1-shot-0",
+                "start": 0,
+                "end": 60,
+                "assetIds": ["photo-1"],
+                "layers": [{"kind": "image", "assetId": "photo-1"}],
+            }],
+        )
+        errors = self._validate(manifest)
+        self.assertTrue(any("static asset used outside an evidence role" in error for error in errors))
+
+    def test_allows_static_chart_evidence(self):
+        manifest = self._manifest(
+            assets=[{
+                "id": "chart-1",
+                "kind": "generated",
+                "role": "chart",
+            }],
+            shots=[{
+                "id": "beat-1-shot-0",
+                "start": 0,
+                "end": 60,
+                "assetIds": ["chart-1"],
+                "layers": [{"kind": "image", "assetId": "chart-1"}],
+            }],
+        )
+        errors = self._validate(manifest)
+        self.assertFalse(any("static asset used outside an evidence role" in error for error in errors))
+
+    def test_rejects_shot_without_visual_asset(self):
+        manifest = self._manifest(shots=[{
+            "id": "beat-1-shot-0",
+            "start": 0,
+            "end": 60,
+            "assetIds": [],
+            "layers": [{"kind": "label", "text": "A fact"}],
+        }])
+        errors = self._validate(manifest)
+        self.assertTrue(any("shot has no visual asset" in error for error in errors))
 
     def test_sentence_keywords_normalize_plural_terms(self):
         terms = keywords("Cities and factories built bridges")
