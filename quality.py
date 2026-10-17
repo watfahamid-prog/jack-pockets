@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 BANNED_GENERATED_ROLES = {"b-roll", "photo", "texture", "archival photo"}
+STATIC_EVIDENCE_ROLES = {"map", "document", "screenshot", "chart", "archival photo"}
 MAX_VISUAL_REUSE = 4
 MAX_GENERATED_RATIO = 0.40
 MAX_PHOTO_RATIO = 0.15
@@ -56,7 +57,7 @@ def validate(path: str) -> list[str]:
     consecutive_same = 0
     static_run = 0
     previous_asset = ""
-    all_manifest_sources = {str(url) for url in (manifest.get("sources") or []) if url}
+    all_manifest_sources = {str(url) for url in (manifest.get("sources") or []) if str(url).strip()}
 
     for beat in beats:
         beat_id = str(beat.get("id", "unknown"))
@@ -65,9 +66,10 @@ def validate(path: str) -> list[str]:
             errors.append(f"evidence gate: beat has no supporting source_urls: {beat_id}")
         else:
             for url in beat_sources:
-                if not str(url).strip():
+                clean_url = str(url).strip()
+                if not clean_url:
                     errors.append(f"evidence gate: empty source URL in {beat_id}")
-                elif all_manifest_sources and str(url) not in all_manifest_sources:
+                elif clean_url not in all_manifest_sources:
                     errors.append(f"evidence gate: beat source is missing from manifest sources: {beat_id}")
         for asset in beat.get("assets", []):
             asset_id = str(asset.get("id") or "")
@@ -93,17 +95,22 @@ def validate(path: str) -> list[str]:
                     errors.append(f"motion gate: more than {MAX_STATIC_RUN} consecutive static-image shots near {shot.get('id')}")
             else:
                 static_run += 1
-            if "generated" in kinds:
-                for asset in chosen:
-                    if asset.get("kind") == "generated" and str(asset.get("role", "")).lower() in BANNED_GENERATED_ROLES:
-                        errors.append(f"graphics gate: generated filler role is not allowed ({asset.get('id')})")
+
+            if not ids:
+                errors.append(f"motion gate: shot has no visual asset: {shot.get('id')}")
             for asset in chosen:
                 kind = str(asset.get("kind", "")).lower()
+                role = str(asset.get("role", "")).lower()
+                if kind in {"photo", "document"} and role not in STATIC_EVIDENCE_ROLES:
+                    errors.append(f"motion gate: static asset used outside an evidence role ({asset.get('id')})")
+                if kind == "generated" and role in BANNED_GENERATED_ROLES:
+                    errors.append(f"graphics gate: generated filler role is not allowed ({asset.get('id')})")
                 if kind in {"video", "photo"}:
                     if not asset.get("source_url"):
                         errors.append(f"provenance gate: real asset has no source_url ({asset.get('id')})")
                     if not asset.get("license"):
                         errors.append(f"provenance gate: real asset has no license ({asset.get('id')})")
+
             primary = ids[0] if ids else ""
             if primary and primary == previous_asset:
                 consecutive_same += 1
