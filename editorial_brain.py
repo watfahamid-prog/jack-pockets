@@ -237,16 +237,38 @@ def build_shots(beat, seed=42, aligned_words=None, sentences_override=None):
         shots.append({"id": f"{beat['id']}-shot-{index}", "start": round(start, 3), "end": round(end, 3), "reason": reason, "intent": intent, "assetIds": [str(chosen["id"])] if chosen else [], "layers": layers, "actions": actions, "sfx": [], "intensity": round(intensity, 2)})
 
     if shots:
-        shots[0]["start"] = 0.0
+        # Whisper can place sentence spans close together or outside the beat when
+        # a sentence cannot be matched exactly. Convert the raw spans into one
+        # monotonic set of cut boundaries, instead of clamping each shot separately
+        # (which can push late shots past the beat end and create overlaps).
+        raw = [
+            (
+                max(0.0, min(total, float(shot.get("start", 0.0)))),
+                max(0.0, min(total, float(shot.get("end", 0.0)))),
+            )
+            for shot in shots
+        ]
+        boundaries = [0.0]
         for index in range(1, len(shots)):
-            gap = float(shots[index]["start"]) - float(shots[index - 1]["end"])
-            if gap > 0:
-                shots[index - 1]["end"] = shots[index]["start"]
-            elif gap < 0:
-                shots[index]["start"] = shots[index - 1]["end"]
-        shots[-1]["end"] = round(total, 3)
-        for shot in shots:
-            shot["start"] = round(max(0.0, float(shot["start"])), 3)
-            shot["end"] = round(min(total, max(float(shot["start"]) + 0.2, float(shot["end"]))), 3)
+            prev_end = raw[index - 1][1]
+            next_start = raw[index][0]
+            candidate = (prev_end + next_start) / 2.0
+            # Keep enough room for every remaining shot; short beats can use
+            # shorter shots, but no boundary is allowed to move backwards.
+            min_step = min(0.2, total / max(1, len(shots)))
+            lower = boundaries[-1] + min_step
+            upper = total - min_step * (len(shots) - index)
+            if upper < lower:
+                candidate = boundaries[-1]
+            else:
+                candidate = max(lower, min(upper, candidate))
+            boundaries.append(candidate)
+        boundaries.append(total)
+
+        for index, shot in enumerate(shots):
+            shot["start"] = round(boundaries[index], 3)
+            shot["end"] = round(boundaries[index + 1], 3)
+            if shot["end"] <= shot["start"]:
+                shot["end"] = round(min(total, shot["start"] + 0.001), 3)
     beat["shots"] = shots
     return beat
