@@ -143,6 +143,14 @@ def build_shots(beat, seed=42, aligned_words=None, sentences_override=None):
     position = 0
     used_counts: dict[str, int] = {}
     previous_asset_id = ""
+    # Beat-level subject terms provide a conservative fallback for connective
+    # narration ("that changed everything") when the shot itself has no nouns.
+    # This keeps footage on-topic without falling back to unrelated stock.
+    beat_context = " ".join([
+        str(beat.get("title", "")),
+        " ".join(str(item) for item in (beat.get("keywords") or [])),
+    ])
+    beat_terms = set(keywords(beat_context))
 
     for index, sentence in enumerate(sentence_list):
         intent, reason, intensity = classify(sentence)
@@ -179,6 +187,14 @@ def build_shots(beat, seed=42, aligned_words=None, sentences_override=None):
                 if str(asset.get("kind", "")).lower() == "video"
                 and _asset_relevance(asset, terms, role) >= MIN_VISUAL_RELEVANCE
             ]
+            if not relevant_videos and beat_terms:
+                # Use a clip that clearly matches the beat's named subject when a
+                # sentence-level match is impossible. Do not use generic fallbacks.
+                relevant_videos = [
+                    asset for asset in assets
+                    if str(asset.get("kind", "")).lower() == "video"
+                    and _asset_relevance(asset, beat_terms, role) >= MIN_VISUAL_RELEVANCE
+                ]
             if relevant_videos:
                 eligible = relevant_videos
             elif role in STATIC_ROLES:
