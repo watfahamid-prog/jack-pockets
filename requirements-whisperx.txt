@@ -1,0 +1,2 @@
+# Install only when benchmarking WhisperX; PyTorch dependencies can be large.
+whisperx>=3.3.1
