@@ -6,6 +6,10 @@ import os
 import time
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 def _align_faster_whisper(audio_path: str, model_name: str):
     from faster_whisper import WhisperModel
