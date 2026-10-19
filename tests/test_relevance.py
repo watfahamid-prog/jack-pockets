@@ -19,6 +19,20 @@ class AssetRelevanceTests(unittest.TestCase):
         self.assertIn("router", matched)
         self.assertIn("network", matched)
 
+    def test_accepts_one_specific_subject_match_for_relevant_stock(self):
+        beat = {
+            "title": "Library archives historical manuscripts",
+            "keywords": ["library", "archives", "historical", "manuscripts"],
+        }
+        asset = {
+            "title": "A person using a library catalog",
+            "description": "Browsing a library card catalogue",
+            "tags": [],
+        }
+        relevant, matched = _asset_relevance("library archives", beat, asset)
+        self.assertTrue(relevant)
+        self.assertIn("library", matched)
+
     def test_rejects_substring_only_match(self):
         beat = {"title": "car", "keywords": ["car"]}
         asset = {"title": "Carpet installation", "description": "Carpet fitting"}
