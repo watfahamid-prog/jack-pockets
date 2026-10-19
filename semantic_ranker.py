@@ -18,8 +18,6 @@ def _model():
 
 def score_assets(sentence: str, assets: list[dict]) -> dict[str, float]:
     """Return cosine-like similarities keyed by asset id; raises if optional deps fail."""
-    import numpy as np
-
     rows = []
     ids = []
     for asset in assets:
@@ -33,6 +31,8 @@ def score_assets(sentence: str, assets: list[dict]) -> dict[str, float]:
         ids.append(asset_id)
     if not rows:
         return {}
+    import numpy as np
+
     model = _model()
     vectors = model.encode([sentence[:1200], *rows], normalize_embeddings=True, convert_to_numpy=True)
     similarities = np.matmul(vectors[1:], vectors[0])
