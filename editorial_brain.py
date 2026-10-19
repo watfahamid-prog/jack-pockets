@@ -197,10 +197,19 @@ def build_shots(beat, seed=42, aligned_words=None, sentences_override=None):
                 eligible = []
 
             if eligible:
+                semantic_scores = {}
+                if os.getenv("JACKPOCKETS_SEMANTIC_RANKING", "").strip().lower() in {"1", "true", "yes"}:
+                    try:
+                        from semantic_ranker import score_assets
+                        semantic_scores = score_assets(sentence, eligible)
+                        print("[visuals] local semantic reranking enabled", flush=True)
+                    except Exception as exc:
+                        print(f"[visuals] semantic reranking unavailable; using lexical ranking: {exc}", flush=True)
                 ranked = sorted(
                     eligible,
                     key=lambda asset: (
-                        _asset_score(asset, terms, role, used_counts.get(str(asset["id"]), 0), previous_asset_id),
+                        _asset_score(asset, terms, role, used_counts.get(str(asset["id"]), 0), previous_asset_id)
+                        + semantic_scores.get(str(asset["id"]), 0.0) * 10.0,
                         str(asset.get("kind", "")).lower() == "video",
                         str(asset["id"]),
                     ),
