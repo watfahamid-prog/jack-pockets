@@ -99,15 +99,12 @@ Continuous validation compiles Python modules before a generation run reaches AP
 
 The default production path remains unchanged. Experimental engines are opt-in and should be benchmarked on a real episode before being made defaults.
 
-- **WhisperX alignment:** install dependencies from `local-experiments-requirements.txt`, then set `JACKPOCKETS_ALIGNER=whisperx`. It runs on CPU in this configuration and may be slower; Faster-Whisper remains the default.
-- **Kokoro local narration:** install the optional dependencies and set `TTS_PROVIDER=kokoro`. This explicitly selects local narration and does not fall back to paid TTS APIs if Kokoro fails. The first run may download model/voice assets.
+- **WhisperX alignment:** install only `requirements-whisperx.txt`, then set `JACKPOCKETS_ALIGNER=whisperx`. It runs on CPU in this configuration and may be slower; Faster-Whisper remains the default.
+- **Kokoro local narration:** install `requirements-kokoro.txt` and set `TTS_PROVIDER=kokoro`. This explicitly selects local narration and does not fall back to paid TTS APIs if Kokoro fails. The first run may download model/voice assets.
 - **Piper local narration:** set `TTS_PROVIDER=piper` to explicitly use the existing local Piper path.
-- **Local semantic footage reranking:** set `JACKPOCKETS_SEMANTIC_RANKING=1`. This downloads the configured sentence-transformer model on first use and adds semantic similarity to the existing lexical/reuse score. If the optional dependency or model fails, the pipeline logs the issue and uses the existing lexical ranker.
-- **Finished-video diagnostics:** run `python video_qc.py out/your-video.mp4 --out out/video-qc.json`. FFmpeg/FFprobe inspect stream metadata and long black segments; PySceneDetect adds scene-cut timings when installed. This is diagnostic only and never edits the video.
+- **Local semantic footage reranking:** set `JACKPOCKETS_SEMANTIC_RANKING=1`. Install `requirements-semantic-ranking.txt`; this downloads the configured sentence-transformer model on first use and adds semantic similarity to the existing lexical/reuse score. If the optional dependency or model fails, the pipeline logs the issue and uses the existing lexical ranker.
+- **Finished-video diagnostics:** run `python video_qc.py out/your-video.mp4 --out out/video-qc.json`. FFmpeg/FFprobe inspect stream metadata and long black segments; PySceneDetect adds scene-cut timings when installed (install `requirements-scene-qc.txt`). This is diagnostic only and never edits the video.
 
 Do not install every optional package blindly on a low-memory machine. WhisperX/PyTorch is a large install, and the local tools use your computer's CPU/GPU and electricity. Optional engines are not yet approved for production until a fresh output has been measured and visually inspected. **Qwen local-LLM integration is intentionally postponed until these tools are tested.**
 
-Optional dependencies:
-```bash
-python -m pip install -r local-experiments-requirements.txt
-```
+Install only the one optional requirements file for the experiment you are running. Do not install WhisperX, Kokoro, scene detection, and semantic ranking together by default; their dependencies and model downloads are independent.
