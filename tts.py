@@ -201,6 +201,47 @@ def _synthesize_piper(text: str, out: Path) -> None:
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
+def _synthesize_kokoro(text: str, out: Path) -> None:
+    """Generate narration locally with Kokoro; never contacts a paid TTS API."""
+    import numpy as np
+    import soundfile as sf
+    from kokoro import KPipeline
+
+    language = os.getenv("KOKORO_LANG_CODE", "a").strip() or "a"
+    voice = os.getenv("KOKORO_VOICE", "af_heart").strip() or "af_heart"
+    pipeline = KPipeline(lang_code=language)
+    audio_chunks = []
+    for _graphemes, _phonemes, audio in pipeline(text, voice=voice, speed=float(os.getenv("KOKORO_SPEED", "1.0"))):
+        if audio is None:
+            continue
+        if hasattr(audio, "detach"):
+            audio = audio.detach().cpu().numpy()
+        chunk = np.asarray(audio, dtype=np.float32).reshape(-1)
+        if chunk.size:
+            audio_chunks.append(chunk)
+    if not audio_chunks:
+        raise RuntimeError("Kokoro produced no audio samples")
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    temp_dir = out.parent / f".{out.stem}-kokoro"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    wav = temp_dir / "narration.wav"
+    try:
+        sf.write(str(wav), np.concatenate(audio_chunks), 24000)
+        if out.suffix.lower() == ".wav":
+            shutil.copyfile(wav, out)
+        else:
+            subprocess.run(
+                ["ffmpeg", "-y", "-v", "error", "-i", str(wav),
+                 "-codec:a", "libmp3lame", "-q:a", "2", str(out)],
+                check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=180,
+            )
+        if not out.exists() or out.stat().st_size < 1000:
+            raise RuntimeError("Kokoro output conversion produced no usable audio")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def _audio_cache_path(text: str) -> Path:
     # Never include API keys in cache paths. Include provider configuration so a newly
     # configured premium voice does not accidentally reuse an older fallback voice.
@@ -209,6 +250,9 @@ def _audio_cache_path(text: str) -> Path:
 
     identity = {
         "text": text,
+        "provider": os.getenv("TTS_PROVIDER", "auto"),
+        "kokoro_voice": os.getenv("KOKORO_VOICE", "af_heart"),
+        "kokoro_lang_code": os.getenv("KOKORO_LANG_CODE", "a"),
         "elevenlabs_voice": os.getenv("ELEVENLABS_VOICE_ID", ""),
         "elevenlabs_model": os.getenv("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2"),
         "openai_model": os.getenv("OPENAI_TTS_MODEL", "gpt-4o-mini-tts"),
@@ -252,6 +296,36 @@ def synthesize(text: str, out: Path) -> Path:
             print(f"[cache] narration cache read skipped: {exc}", flush=True)
 
     errors: list[str] = []
+    provider = os.getenv("TTS_PROVIDER", "auto").strip().lower()
+    if provider == "kokoro":
+        try:
+            _synthesize_kokoro(text, out)
+            _save_audio_cache(out, text)
+            print(f"[tts] narration generated locally with Kokoro ({os.getenv('KOKORO_VOICE', 'af_heart')})", flush=True)
+            return out
+        except Exception as exc:
+            raise RuntimeError(
+                "Kokoro was explicitly selected but local synthesis failed; no paid TTS fallback was attempted. "
+                "Install local-experiments-requirements.txt and check the Kokoro voice/model setup. "
+                f"Details: {exc}"
+            ) from exc
+    if provider not in {"auto", "edge", "piper", "elevenlabs", "openai"}:
+        raise ValueError("TTS_PROVIDER must be auto, kokoro, edge, piper, elevenlabs, or openai")
+
+    if provider == "piper":
+        _synthesize_piper(text, out)
+        _save_audio_cache(out, text)
+        print(f"[tts] narration generated locally with Piper ({os.getenv('PIPER_MODEL', 'en_US-lessac-medium')})", flush=True)
+        return out
+    if provider == "edge":
+        voice = os.getenv("TTS_VOICE") or DEFAULT_VOICE
+        asyncio.run(_synthesize_edge(text, out, voice))
+        if not out.exists() or out.stat().st_size == 0:
+            raise RuntimeError("Edge TTS returned no audio file")
+        _save_audio_cache(out, text)
+        print(f"[tts] narration generated with Edge TTS voice {voice}", flush=True)
+        return out
+
     api_key = os.getenv("ELEVENLABS_API_KEY", "").strip()
     voice_id = os.getenv("ELEVENLABS_VOICE_ID", "").strip()
     if api_key and voice_id:
