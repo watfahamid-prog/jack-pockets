@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -371,6 +372,20 @@ def main() -> None:
         f"{expected['width']}x{expected['height']} | {actual_fps:g}fps | audio=yes",
         flush=True,
     )
+
+    if os.getenv("JACKPOCKETS_VIDEO_QC", "").strip().lower() in {"1", "true", "yes"}:
+        try:
+            from video_qc import inspect_video
+            qc_report = inspect_video(str(out))
+            qc_path = root / "video-qc.json"
+            qc_path.write_text(json.dumps(qc_report, indent=2), encoding="utf-8")
+            print(f"[video-qc] diagnostics saved to {qc_path}", flush=True)
+            for warning in qc_report.get("warnings", []):
+                print(f"[video-qc] warning: {warning}", flush=True)
+        except Exception as exc:
+            # The existing mandatory FFprobe checks above remain authoritative.
+            # Optional scene/black-frame diagnostics must not invalidate a valid render.
+            print(f"[video-qc] optional diagnostics failed: {exc}", flush=True)
 
 
 if __name__ == "__main__":
