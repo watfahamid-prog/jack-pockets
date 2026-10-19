@@ -49,6 +49,22 @@ class FootageMatchingTests(unittest.TestCase):
         self.assertEqual(result["shots"][0]["assetIds"], ["ship"])
         self.assertEqual(result["shots"][1]["assetIds"], ["mountain"])
 
+    def test_connective_sentence_can_use_strongly_beat_relevant_video(self):
+        beat = {
+            "id": "beat-context", "start": 0, "end": 8,
+            "title": "Rare emerald necklace auction",
+            "keywords": ["emerald", "auction", "necklace"],
+            "narration": "Rare emerald necklace sold at auction. That changed everything.",
+            "assets": [
+                {"id": "auction-video", "kind": "video",
+                 "title": "Rare emerald necklace auction footage",
+                 "description": "", "tags": []},
+            ],
+        }
+        shots = build_shots(beat)["shots"]
+        self.assertEqual(len(shots), 2)
+        self.assertEqual(shots[1]["assetIds"], ["auction-video"])
+
     def test_weak_assets_are_not_used_as_random_filler(self):
         beat = {
             "id": "beat-2", "start": 0, "end": 5,
