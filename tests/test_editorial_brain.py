@@ -85,6 +85,32 @@ class FootageMatchingTests(unittest.TestCase):
         self.assertEqual([layer["text"] for layer in labels], ["TOTAL = $50 billion"])
         self.assertNotIn("$50 billion", result["shots"][0].get("assetIds", []))
 
+    def test_late_alignment_spans_never_create_overlapping_shots(self):
+        sentences_text = [f"Sentence token{i}." for i in range(10)]
+        beat = {
+            "id": "beat-late", "start": 10, "end": 14,
+            "narration": " ".join(sentences_text),
+            "assets": [],
+        }
+        words = []
+        for i in range(10):
+            start = 10.0 + i * 0.55
+            words.extend([
+                {"word": "Sentence", "start": start, "end": start + 0.2},
+                {"word": f"token{i}", "start": start + 0.2, "end": start + 0.4},
+            ])
+
+        shots = build_shots(beat, aligned_words=words)["shots"]
+        self.assertEqual(len(shots), 10)
+        self.assertEqual(shots[0]["start"], 0.0)
+        self.assertAlmostEqual(shots[-1]["end"], 4.0, places=3)
+        for index, shot in enumerate(shots):
+            self.assertGreater(shot["end"], shot["start"])
+            self.assertGreaterEqual(shot["start"], 0.0)
+            self.assertLessEqual(shot["end"], 4.0)
+            if index:
+                self.assertGreaterEqual(shot["start"], shots[index - 1]["end"])
+
     def test_unmatched_aligned_sentences_still_advance_timing(self):
         beat = {
             "id": "beat-5", "start": 10, "end": 20,
