@@ -271,13 +271,10 @@ def build_shots(beat, seed=42, aligned_words=None, sentences_override=None):
             candidate = (prev_end + next_start) / 2.0
             # Keep enough room for every remaining shot; short beats can use
             # shorter shots, but no boundary is allowed to move backwards.
-            min_step = min(0.2, total / max(1, len(shots)))
+            min_step = min(0.05, total / max(1, len(shots)))
             lower = boundaries[-1] + min_step
             upper = total - min_step * (len(shots) - index)
-            if upper < lower:
-                candidate = boundaries[-1]
-            else:
-                candidate = max(lower, min(upper, candidate))
+            candidate = max(lower, min(upper, candidate))
             boundaries.append(candidate)
         boundaries.append(total)
 
@@ -285,6 +282,8 @@ def build_shots(beat, seed=42, aligned_words=None, sentences_override=None):
             shot["start"] = round(boundaries[index], 3)
             shot["end"] = round(boundaries[index + 1], 3)
             if shot["end"] <= shot["start"]:
-                shot["end"] = round(min(total, shot["start"] + 0.001), 3)
+                # Three-decimal timestamps can collapse extremely short intervals.
+                # Keep the boundary stable rather than extending into the next shot.
+                shot["end"] = shot["start"]
     beat["shots"] = shots
     return beat
