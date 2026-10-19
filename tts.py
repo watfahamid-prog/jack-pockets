@@ -328,6 +328,21 @@ def synthesize(text: str, out: Path) -> Path:
 
     api_key = os.getenv("ELEVENLABS_API_KEY", "").strip()
     voice_id = os.getenv("ELEVENLABS_VOICE_ID", "").strip()
+    if provider == "elevenlabs":
+        if not api_key or not voice_id:
+            raise RuntimeError("TTS_PROVIDER=elevenlabs requires ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID")
+        _synthesize_elevenlabs(text, out, api_key, voice_id)
+        _save_audio_cache(out, text)
+        print("[tts] narration generated with ElevenLabs", flush=True)
+        return out
+    if provider == "openai":
+        if not os.getenv("OPENAI_API_KEY", "").strip():
+            raise RuntimeError("TTS_PROVIDER=openai requires OPENAI_API_KEY")
+        _synthesize_openai(text, out)
+        _save_audio_cache(out, text)
+        print(f"[tts] narration generated with OpenAI TTS ({os.getenv('OPENAI_TTS_MODEL', 'gpt-4o-mini-tts')})", flush=True)
+        return out
+
     if api_key and voice_id:
         try:
             _synthesize_elevenlabs(text, out, api_key, voice_id)
