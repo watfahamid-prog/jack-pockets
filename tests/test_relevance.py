@@ -7,6 +7,19 @@ import semantic_ranker
 
 
 class AssetRelevanceTests(unittest.TestCase):
+    def test_media_queries_use_short_subject_phrases_not_full_visual_directions(self):
+        beat = {
+            "title": "The Emerging Frontier: Commercial Space and Lunar Property",
+            "keywords": ["lunar outpost", "artemis accords", "moon property", "commercial space"],
+            "visual_intent": "Cinematic sequence sweeping over a generated line-art graphic of lunar surface mapping",
+            "narration": "As commercial spaceflight accelerates, the definition of wealth is expanding.",
+        }
+        queries = _asset_search_queries(beat, limit=3)
+        self.assertEqual(queries[0], "lunar outpost artemis accords")
+        self.assertEqual(queries[1], "lunar outpost commercial space")
+        self.assertEqual(queries[2], "moon property commercial space")
+        self.assertTrue(all(len(query.split()) <= 5 for query in queries))
+
     def test_media_queries_prioritize_specific_keywords_over_generic_chapter_title(self):
         beat = {
             "title": "The Emerging Frontier: Celestial Real Estate",
