@@ -78,3 +78,47 @@ def _relevant_sources(topic: str, beat: dict, sources: list[dict], limit: int = 
         ranked.append((len(hits), str(item["url"])))
     ranked.sort(key=lambda pair: pair[0], reverse=True)
     return list(dict.fromkeys(url for _, url in ranked))[:limit]
+
+def _asset_search_queries(beat: dict, limit: int = 4) -> list[str]:
+    """Build specific, progressively broader media queries from editorial metadata."""
+    if limit < 1:
+        return []
+    title = str(beat.get("title", "")).strip()
+    raw_keywords = beat.get("keywords", [])
+    if isinstance(raw_keywords, str):
+        raw_keywords = re.split(r"[,;|]", raw_keywords)
+    keywords = [str(item).strip() for item in (raw_keywords or []) if str(item).strip()]
+    visual_intent = str(beat.get("visual_intent") or beat.get("visual") or "").strip()
+    narration = str(beat.get("narration", "")).strip()
+    first_sentence = re.split(r"(?<=[.!?])\\s+", narration)[0].strip() if narration else ""
+
+    # Prefer concrete keywords/visual intent over chapter titles, which are often
+    # metaphorical and return generic stock footage.
+    candidates = [
+        " ".join(keywords[:4]),
+        visual_intent,
+        first_sentence,
+        title,
+    ]
+    stopwords = {
+        "the", "and", "for", "with", "from", "that", "this", "then", "they",
+        "their", "there", "into", "about", "after", "before", "what", "when",
+        "where", "which", "while", "would", "could", "should", "have", "been",
+        "were", "was", "are", "has", "had", "most", "more", "than", "true",
+        "cost", "story", "conclusion", "emerging", "frontier", "explained",
+        "revealed", "secret", "secrets", "journey", "future", "human", "ambition",
+        "footage", "video", "scene", "cinematic", "beautiful", "dramatic",
+    }
+    normalized = []
+    for candidate in candidates:
+        query = re.sub(r"\\s+", " ", candidate).strip(" ,.;:-")
+        tokens = re.findall(r"[a-zA-Z0-9]{3,}", query.lower())
+        # Keep original phrase if it contains a concrete token; otherwise skip it.
+        if not tokens or not any(token not in stopwords and not token.isdigit() for token in tokens):
+            continue
+        if query and query.casefold() not in {item.casefold() for item in normalized}:
+            normalized.append(query[:160])
+        if len(normalized) >= limit:
+            break
+    return normalized
+
