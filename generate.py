@@ -141,31 +141,11 @@ def main() -> None:
 
             candidates = videos
             if not candidates:
-                photo_providers = [
-                    ("Pexels", lambda: search_pexels(query, asset_dir, limit=3)),
-                    ("Pixabay", lambda: search_pixabay(query, asset_dir, limit=3)),
-                    ("Wikimedia Commons", lambda: search_commons_photos(query, asset_dir, limit=3)),
-                ]
-                for provider_name, search in photo_providers:
-                    try:
-                        found_photos = search()
-                    except Exception as exc:
-                        print(f"[assets] {provider_name} photo search failed for beat {index + 1}: {exc}", flush=True)
-                        found_photos = []
-                    candidates = []
-                    for item in found_photos:
-                        relevant, matched_terms = _asset_relevance(query, beat, item)
-                        if not relevant:
-                            print(
-                                f"[assets] rejected unrelated photo provider={provider_name} "
-                                f"beat={index + 1} title={str(item.get('title', ''))[:100]!r} "
-                                f"matched={matched_terms}",
-                                flush=True,
-                            )
-                            continue
-                        candidates.append(item)
-                    if candidates:
-                        break
+                print(
+                    f"[assets] no relevant moving video for query={query[:100]!r}; "
+                    "not substituting stock photos for b-roll",
+                    flush=True,
+                )
 
             for item in candidates:
                 relevant, matched_terms = _asset_relevance(query, beat, item)
