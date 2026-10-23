@@ -80,7 +80,7 @@ def _relevant_sources(topic: str, beat: dict, sources: list[dict], limit: int = 
     return list(dict.fromkeys(url for _, url in ranked))[:limit]
 
 def _asset_search_queries(beat: dict, limit: int = 4) -> list[str]:
-    """Build specific, progressively broader media queries from editorial metadata."""
+    """Create short, subject-first stock-media queries without generic prose."""
     if limit < 1:
         return []
     title = str(beat.get("title", "")).strip()
@@ -89,35 +89,43 @@ def _asset_search_queries(beat: dict, limit: int = 4) -> list[str]:
         raw_keywords = re.split(r"[,;|]", raw_keywords)
     keywords = [str(item).strip() for item in (raw_keywords or []) if str(item).strip()]
     visual_intent = str(beat.get("visual_intent") or beat.get("visual") or "").strip()
-    narration = str(beat.get("narration", "")).strip()
-    first_sentence = re.split(r"(?<=[.!?])\s+", narration)[0].strip() if narration else ""
 
-    # Prefer concrete keywords/visual intent over chapter titles, which are often
-    # metaphorical and return generic stock footage.
-    candidates = [
-        " ".join(keywords[:4]),
-        visual_intent,
-        first_sentence,
-        title,
-    ]
+    # Stock providers respond poorly to full narration/production directions
+    # ("cinematic sequence", "sweeping view"). Search concrete subject phrases.
+    candidates = []
+    if len(keywords) >= 2:
+        candidates.append(" ".join(keywords[:2]))
+    if len(keywords) >= 3:
+        candidates.append(" ".join([keywords[0], keywords[-1]]))
+    if len(keywords) >= 4:
+        candidates.append(" ".join(keywords[-2:]))
+    elif len(keywords) == 3:
+        candidates.append(" ".join(keywords[1:]))
+    candidates.extend([title, visual_intent])
+
     stopwords = {
         "the", "and", "for", "with", "from", "that", "this", "then", "they",
         "their", "there", "into", "about", "after", "before", "what", "when",
         "where", "which", "while", "would", "could", "should", "have", "been",
         "were", "was", "are", "has", "had", "most", "more", "than", "true",
         "cost", "story", "conclusion", "emerging", "frontier", "explained",
-        "revealed", "reveals", "secret", "secrets", "journey", "future", "human", "ambition",
-        "footage", "video", "scene", "cinematic", "beautiful", "dramatic",
+        "revealed", "reveals", "secret", "secrets", "journey", "future", "human",
+        "ambition", "footage", "video", "scene", "cinematic", "beautiful",
+        "dramatic", "sequence", "sweeping", "view", "views", "shot", "shots",
+        "archival", "contemporary", "establishing", "contrasted", "generated",
     }
     normalized = []
     for candidate in candidates:
-        query = re.sub(r"\s+", " ", candidate).strip(" ,.;:-")
+        query = re.sub(r"\\s+", " ", candidate).strip(" ,.;:-")
         tokens = re.findall(r"[a-zA-Z0-9]{3,}", query.lower())
-        # Keep original phrase if it contains a concrete token; otherwise skip it.
-        if not tokens or not any(token not in stopwords and not token.isdigit() for token in tokens):
+        concrete = [token for token in tokens if token not in stopwords and not token.isdigit()]
+        if len(concrete) < 1:
             continue
+        # Keep long visual directions from turning into poor search queries.
+        if candidate == visual_intent and len(tokens) > 8:
+            query = " ".join(concrete[:6])
         if query and query.casefold() not in {item.casefold() for item in normalized}:
-            normalized.append(query[:160])
+            normalized.append(query[:120])
         if len(normalized) >= limit:
             break
     return normalized
