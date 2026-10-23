@@ -1,0 +1,23 @@
+name: Test Debugging Failure
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  intentional-failure:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report test context
+        run: |
+          echo "This workflow is intentionally failing to test the debugging system."
+          echo "Commit: $GITHUB_SHA"
+          echo "Actor: $GITHUB_ACTOR"
+          echo "Event: $GITHUB_EVENT_NAME"
+          echo "Repository: $GITHUB_REPOSITORY"
+
+      - name: Intentional failure
+        run: |
+          echo "DEBUG TEST: generating an intentional failure"
+          echo "Expected error: TEST_DEBUGGING_SYSTEM_FAILURE"
+          exit 1
