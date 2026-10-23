@@ -1,8 +1,16 @@
 name: Test Debugging Failure
 
 on:
-  push:
   workflow_dispatch:
+    inputs:
+      confirm_failure:
+        description: "Set true only when deliberately testing the debugging system"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
 
 jobs:
   intentional-failure:
@@ -10,13 +18,18 @@ jobs:
     steps:
       - name: Report test context
         run: |
-          echo "This workflow is intentionally failing to test the debugging system."
+          echo "This workflow is a manual-only debugging test."
           echo "Commit: $GITHUB_SHA"
           echo "Actor: $GITHUB_ACTOR"
           echo "Event: $GITHUB_EVENT_NAME"
           echo "Repository: $GITHUB_REPOSITORY"
 
+      - name: Skip failure unless explicitly confirmed
+        if: ${{ !inputs.confirm_failure }}
+        run: echo "Safety gate active. Set confirm_failure=true to intentionally fail this test."
+
       - name: Intentional failure
+        if: ${{ inputs.confirm_failure }}
         run: |
           echo "DEBUG TEST: generating an intentional failure"
           echo "Expected error: TEST_DEBUGGING_SYSTEM_FAILURE"
