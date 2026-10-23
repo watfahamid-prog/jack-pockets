@@ -1,12 +1,33 @@
 import unittest
 
-from relevance import _asset_relevance, _relevant_sources
+from relevance import _asset_relevance, _asset_search_queries, _relevant_sources
 from unittest.mock import patch
 
 import semantic_ranker
 
 
 class AssetRelevanceTests(unittest.TestCase):
+    def test_media_queries_prioritize_specific_keywords_over_generic_chapter_title(self):
+        beat = {
+            "title": "The Emerging Frontier: Celestial Real Estate",
+            "keywords": ["lunar outpost", "Artemis Accords", "moon surface"],
+            "visual_intent": "NASA lunar lander on the Moon",
+            "narration": "The next lunar outpost depends on NASA missions and surface access.",
+        }
+        queries = _asset_search_queries(beat, limit=4)
+        self.assertEqual(queries[0], "lunar outpost Artemis Accords moon surface")
+        self.assertEqual(queries[1], "NASA lunar lander on the Moon")
+        self.assertNotEqual(queries[0], beat["title"])
+        self.assertLessEqual(len(queries), 4)
+
+    def test_media_queries_skip_generic_or_duplicate_candidates(self):
+        beat = {
+            "title": "The True Cost of Human Ambition",
+            "keywords": ["the", "future", "cost"],
+            "narration": "The story reveals the future.",
+        }
+        self.assertEqual(_asset_search_queries(beat, limit=4), [])
+
     def test_accepts_exact_subject_terms_in_clip_metadata(self):
         beat = {
             "title": "AS 7007 routing incident",
