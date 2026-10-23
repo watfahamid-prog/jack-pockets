@@ -28,8 +28,8 @@ class AssetRelevanceTests(unittest.TestCase):
             "narration": "The next lunar outpost depends on NASA missions and surface access.",
         }
         queries = _asset_search_queries(beat, limit=4)
-        self.assertEqual(queries[0], "lunar outpost Artemis Accords moon surface")
-        self.assertEqual(queries[1], "NASA lunar lander on the Moon")
+        self.assertEqual(queries[0], "lunar outpost Artemis Accords")
+        self.assertEqual(queries[1], "lunar outpost moon surface")
         self.assertNotEqual(queries[0], beat["title"])
         self.assertLessEqual(len(queries), 4)
 
