@@ -1,6 +1,9 @@
 import unittest
 
 from relevance import _asset_relevance, _relevant_sources
+from unittest.mock import patch
+
+import semantic_ranker
 
 
 class AssetRelevanceTests(unittest.TestCase):
@@ -90,6 +93,17 @@ class ResearchRelevanceTests(unittest.TestCase):
             sources,
         )
         self.assertEqual(result, [])
+
+
+
+class SemanticRankerTests(unittest.TestCase):
+    def test_empty_assets_returns_without_loading_model(self):
+        with patch.object(semantic_ranker, "_model") as model:
+            self.assertEqual(semantic_ranker.score_assets("a ship", []), {})
+            model.assert_not_called()
+
+    def test_optional_model_is_lazy_loaded(self):
+        self.assertTrue(callable(semantic_ranker.score_assets))
 
 
 if __name__ == "__main__":

@@ -2,7 +2,9 @@ name: Validate documentary pipeline
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - experiment/free-local-engines-before-qwen
   pull_request:
     branches: [main]
 
@@ -30,5 +32,9 @@ jobs:
           python -m pip install -r requirements.txt
       - name: Compile Python
         run: python -m compileall -q .
+      - name: Test optional local-engine flags without downloading models
+        run: |
+          python -m unittest discover -s tests -p 'test_semantic_ranker.py' -v
+          python -m unittest discover -s tests -p 'test_local_engine_flags.py' -v
       - name: Typecheck Remotion
         run: npm run typecheck

@@ -1,0 +1,2 @@
+# Install only for optional local semantic footage ranking.
+sentence-transformers>=3.0.0

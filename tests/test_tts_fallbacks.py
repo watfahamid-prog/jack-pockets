@@ -18,6 +18,7 @@ class TTSFallbackTests(unittest.TestCase):
             "ELEVENLABS_VOICE_ID": "test-voice",
             "OPENAI_API_KEY": "test-openai-key",
             "TTS_VOICE": "en-US-GuyNeural",
+            "TTS_PROVIDER": "auto",
             # Unit tests must exercise the mocked providers, not reuse a runner's
             # persistent narration cache from an earlier workflow run.
             "JACKPOCKETS_DISABLE_CACHE": "1",
@@ -76,6 +77,27 @@ class TTSFallbackTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(RuntimeError, "All available narration providers failed"):
                 tts.synthesize("A documentary narration.", self.out)
+
+    def test_explicit_kokoro_never_falls_back_to_paid_providers(self):
+        with patch.dict(os.environ, {"TTS_PROVIDER": "kokoro"}, clear=False), \
+             patch.object(tts, "_synthesize_kokoro") as kokoro, \
+             patch.object(tts, "_synthesize_elevenlabs") as eleven, \
+             patch.object(tts, "_synthesize_openai") as openai:
+            result = tts.synthesize("A documentary narration.", self.out)
+        self.assertEqual(result, self.out)
+        kokoro.assert_called_once()
+        eleven.assert_not_called()
+        openai.assert_not_called()
+
+    def test_explicit_kokoro_failure_does_not_try_paid_providers(self):
+        with patch.dict(os.environ, {"TTS_PROVIDER": "kokoro"}, clear=False), \
+             patch.object(tts, "_synthesize_kokoro", side_effect=RuntimeError("local model unavailable")), \
+             patch.object(tts, "_synthesize_elevenlabs") as eleven, \
+             patch.object(tts, "_synthesize_openai") as openai:
+            with self.assertRaisesRegex(RuntimeError, "no paid TTS fallback"):
+                tts.synthesize("A documentary narration.", self.out)
+        eleven.assert_not_called()
+        openai.assert_not_called()
 
 
 if __name__ == "__main__":

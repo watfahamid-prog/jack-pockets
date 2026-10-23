@@ -1,0 +1,2 @@
+# Install only for local scene-change detection.
+scenedetect[opencv]>=0.6.5
