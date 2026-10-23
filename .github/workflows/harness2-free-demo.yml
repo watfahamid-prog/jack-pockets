@@ -1,0 +1,55 @@
+name: Harness² Free Demo (Isolated)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/harness2-free-demo.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: harness2-free-demo
+  cancel-in-progress: false
+
+jobs:
+  harness2-demo:
+    name: Run credential-free Harness² demo
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout Jack Pockets
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Fetch Harness² into an isolated directory
+        run: git clone --depth 1 https://github.com/google-research/harness2.git harness2
+
+      - name: Install Harness² demo dependencies
+        working-directory: harness2
+        run: |
+          uv venv --python 3.12 .venv
+          uv pip install --python .venv/bin/python -e '.[render]'
+
+      - name: Run local demo without model credentials
+        working-directory: harness2
+        run: |
+          .venv/bin/harness2-demo --output runs/jack-pockets-isolated-demo --k 2
+
+      - name: Upload demo evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness2-free-demo-${{ github.run_number }}
+          path: |
+            harness2/runs/jack-pockets-isolated-demo/**
+          if-no-files-found: warn
+          retention-days: 14
