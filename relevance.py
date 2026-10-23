@@ -32,9 +32,17 @@ def _asset_relevance(query: str, beat: dict, asset: dict) -> tuple[bool, list[st
     # as matches for "carpet", allowing unrelated footage through the gate.
     metadata_terms = set(re.findall(r"[a-z0-9]{3,}", metadata))
     found = sorted(target & metadata_terms)
-    # A strong match on one specific term beats unrelated generic filler.
+    # A strong match on one specific subject noun is enough to keep useful stock
+    # footage (for example, a library-catalog clip for a library-archive beat).
+    # Broad production/history words alone are not specific enough.
+    broad_terms = {
+        "historical", "history", "archive", "archives", "manuscript",
+        "manuscripts", "documentary", "footage", "visualization",
+        "cinematic", "modern", "ancient", "scene", "video",
+    }
+    strong_hits = [term for term in found if len(term) >= 6 and term not in broad_terms]
     required = 2 if len(target) >= 5 else 1
-    return len(found) >= required, found
+    return len(found) >= required or bool(strong_hits), found
 
 def _relevant_sources(topic: str, beat: dict, sources: list[dict], limit: int = 3) -> list[str]:
     """Return only sources whose title/content overlaps the actual beat subject."""
