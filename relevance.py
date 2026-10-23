@@ -106,7 +106,7 @@ def _asset_search_queries(beat: dict, limit: int = 4) -> list[str]:
         "where", "which", "while", "would", "could", "should", "have", "been",
         "were", "was", "are", "has", "had", "most", "more", "than", "true",
         "cost", "story", "conclusion", "emerging", "frontier", "explained",
-        "revealed", "secret", "secrets", "journey", "future", "human", "ambition",
+        "revealed", "reveals", "secret", "secrets", "journey", "future", "human", "ambition",
         "footage", "video", "scene", "cinematic", "beautiful", "dramatic",
     }
     normalized = []
