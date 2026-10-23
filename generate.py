@@ -11,7 +11,7 @@ from pathlib import Path
 from assets import generate_role_asset, make_asset_plan, search_pexels, search_pexels_videos, search_pixabay, search_pixabay_videos, search_commons_videos, search_commons_photos, search_archive_videos
 from llm import generate
 from manifest import build
-from relevance import _asset_relevance, _relevant_sources
+from relevance import _asset_relevance, _asset_search_queries, _relevant_sources
 from music import get_music
 from quality import validate
 from research import search_web
@@ -100,12 +100,10 @@ def main() -> None:
         beat_keywords = [str(x).strip() for x in raw_keywords if str(x).strip()]
         narration_text = str(beat.get("narration", "")).strip()
         first_sentence = re.split(r"(?<=[.!?])\s+", narration_text)[0][:180]
-        keyword_tokens = []
-        for keyword in beat_keywords:
-            keyword_tokens.extend(re.findall(r"[a-zA-Z0-9]{3,}", keyword))
-        keyword_phrase = " ".join(dict.fromkeys(keyword_tokens[:4]))
-        queries = list(dict.fromkeys(q for q in [title, keyword_phrase] if q))
-        queries = queries[:min(2, args.assets_per_beat)]
+        queries = _asset_search_queries(
+            {**beat, "title": title, "keywords": beat_keywords, "narration": narration_text},
+            limit=min(4, max(2, args.assets_per_beat + 1)),
+        )
         stock_assets = []
         generated_assets = []
 
@@ -185,6 +183,16 @@ def main() -> None:
                 item["relevance_terms"] = matched_terms
                 item["src"] = public_path(Path(item["src"]))
                 stock_assets.append(item)
+
+            # If enough distinct moving clips have been found, avoid extra provider
+            # calls. Otherwise continue to the next, more specific query instead
+            # of silently reusing one clip across many narration sentences.
+            distinct_video_ids = {
+                str(asset.get("id")) for asset in stock_assets
+                if asset.get("kind") == "video" and asset.get("id")
+            }
+            if len(distinct_video_ids) >= 3:
+                break
 
         # Generated graphics are explanatory evidence layers, not substitutes for footage.
         # Never manufacture fake "b-roll"/photo/texture/archival imagery just to satisfy a shot.
