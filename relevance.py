@@ -90,7 +90,7 @@ def _asset_search_queries(beat: dict, limit: int = 4) -> list[str]:
     keywords = [str(item).strip() for item in (raw_keywords or []) if str(item).strip()]
     visual_intent = str(beat.get("visual_intent") or beat.get("visual") or "").strip()
     narration = str(beat.get("narration", "")).strip()
-    first_sentence = re.split(r"(?<=[.!?])\\s+", narration)[0].strip() if narration else ""
+    first_sentence = re.split(r"(?<=[.!?])\s+", narration)[0].strip() if narration else ""
 
     # Prefer concrete keywords/visual intent over chapter titles, which are often
     # metaphorical and return generic stock footage.
@@ -111,7 +111,7 @@ def _asset_search_queries(beat: dict, limit: int = 4) -> list[str]:
     }
     normalized = []
     for candidate in candidates:
-        query = re.sub(r"\\s+", " ", candidate).strip(" ,.;:-")
+        query = re.sub(r"\s+", " ", candidate).strip(" ,.;:-")
         tokens = re.findall(r"[a-zA-Z0-9]{3,}", query.lower())
         # Keep original phrase if it contains a concrete token; otherwise skip it.
         if not tokens or not any(token not in stopwords and not token.isdigit() for token in tokens):
