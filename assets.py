@@ -139,7 +139,7 @@ def _pixabay_key()->str:
     print(f"[pixabay] key configured={'yes' if key else 'no'}")
     return key
 
-def search_pixabay_videos(query:str,out:Path,limit:int=4)->list[dict]:
+def search_pixabay_videos(query:str,out:Path,limit:int=4,beat:dict|None=None)->list[dict]:
     """Search and download a small set of Pixabay videos as a Pexels fallback."""
     key=_pixabay_key()
     if not key:
@@ -170,13 +170,23 @@ def search_pixabay_videos(query:str,out:Path,limit:int=4)->list[dict]:
         vid=str(video.get("id",""))
         if not vid:
             continue
+        tags = str(video.get("tags") or "").split(", ")
+        candidate = {"title": str(video.get("tags") or ""), "tags": tags, "description": str(video.get("tags") or "")}
+        if beat is not None:
+            relevant, matched_terms = _asset_relevance(query, beat, candidate)
+            if not relevant:
+                print(
+                    f"[pixabay] rejected before download tags={str(video.get('tags') or '')[:100]!r} matched={matched_terms}",
+                    flush=True,
+                )
+                continue
         path=out/f"pixabay-video-{vid}.mp4"
         try:
             if not path.exists():
                 _download(chosen["url"],path)
             result.append({
                 "id":f"pixabay-video-{vid}","kind":"video","src":str(path),
-                "credit":video.get("user"),"title":str(video.get("tags") or ""),"tags":str(video.get("tags") or "").split(", "),"description":str(video.get("tags") or ""),"license":"Pixabay","source_url":video.get("pageURL"),
+                "credit":video.get("user"),"title":str(video.get("tags") or ""),"tags":tags,"description":str(video.get("tags") or ""),"license":"Pixabay","source_url":video.get("pageURL"),
                 "score":1.0,"role":"b-roll","duration":float(video.get("duration") or 0),
                 "width":chosen.get("width"),"height":chosen.get("height"),
             })
@@ -226,7 +236,7 @@ def search_pixabay(query:str,out:Path,limit:int=3)->list[dict]:
     return result
 
 
-def search_archive_videos(query:str,out:Path,limit:int=3)->list[dict]:
+def search_archive_videos(query:str,out:Path,limit:int=3,beat:dict|None=None)->list[dict]:
     """Search Internet Archive for openly licensed documentary b-roll; no API key required."""
     out.mkdir(parents=True, exist_ok=True)
     terms = re.findall(r"[a-zA-Z0-9]{3,}", str(query).lower())[:7]
@@ -277,6 +287,19 @@ def search_archive_videos(query:str,out:Path,limit:int=3)->list[dict]:
                     flush=True,
                 )
                 continue
+            if beat is not None:
+                candidate = {
+                    "title": str(doc.get("title") or ""),
+                    "description": str(doc.get("description") or "")[:1800],
+                    "tags": [],
+                }
+                relevant, beat_matches = _asset_relevance(query, beat, candidate)
+                if not relevant:
+                    print(
+                        f"[archive] rejected before metadata/download title={candidate['title'][:100]!r} matched={beat_matches}",
+                        flush=True,
+                    )
+                    continue
             # Only use items whose metadata explicitly identifies a permissive/public-domain license.
             if not any(marker in license_url for marker in (
                 "creativecommons.org/licenses/", "creativecommons.org/publicdomain/",
@@ -299,7 +322,7 @@ def search_archive_videos(query:str,out:Path,limit:int=3)->list[dict]:
                         continue
                     if size and size < 500_000:
                         continue
-                    if size and size > 350_000_000:
+                    if size and size > 125_000_000:
                         continue
                     if "mpeg4" in fmt or "h.264" in fmt or ext in {".mp4", ".webm", ".ogv", ".mov"}:
                         candidates.append((0 if ext == ".mp4" else 1, size or 10**12, name))
@@ -331,7 +354,7 @@ def search_archive_videos(query:str,out:Path,limit:int=3)->list[dict]:
     return result
 
 
-def _commons_search(query:str,out:Path,limit:int=3,kind:str="video")->list[dict]:
+def _commons_search(query:str,out:Path,limit:int=3,kind:str="video",beat:dict|None=None)->list[dict]:
     """Find openly licensed Wikimedia Commons media without requiring an API key."""
     out.mkdir(parents=True, exist_ok=True)
     clean = re.sub(r"[^a-zA-Z0-9 \"'-]", " ", str(query))
@@ -373,6 +396,18 @@ def _commons_search(query:str,out:Path,limit:int=3,kind:str="video")->list[dict]
             ext = os.path.splitext(urlparse(src).path)[1].lower() or ".jpg"
             if ext not in {".jpg", ".jpeg", ".png", ".webp"}:
                 ext = ".jpg"
+        metadata = info.get("extmetadata") or {}
+        title = str(page.get("title") or "").replace("File:","").replace("_"," ")
+        description = str(metadata.get("ImageDescription", {}).get("value", "") if isinstance(metadata.get("ImageDescription"), dict) else "")
+        candidate = {"title": title, "description": description, "tags": []}
+        if beat is not None:
+            relevant, matched_terms = _asset_relevance(query, beat, candidate)
+            if not relevant:
+                print(
+                    f"[commons] rejected before download title={title[:100]!r} matched={matched_terms}",
+                    flush=True,
+                )
+                continue
         page_id = str(page.get("pageid") or re.sub(r"[^a-zA-Z0-9]+", "-", page.get("title", "commons")).strip("-"))
         asset_id = f"commons-{kind}-{page_id}"
         path = out / f"{asset_id}{ext}"
@@ -382,7 +417,6 @@ def _commons_search(query:str,out:Path,limit:int=3,kind:str="video")->list[dict]
             if path.stat().st_size < 5000:
                 path.unlink(missing_ok=True)
                 continue
-            metadata = info.get("extmetadata") or {}
             artist_value = metadata.get("Artist", {}).get("value", "") if isinstance(metadata.get("Artist"), dict) else ""
             artist = re.sub(r"<[^>]+>", " ", str(artist_value)).strip()[:180]
             license_value = metadata.get("LicenseShortName", {}).get("value", "Wikimedia Commons") if isinstance(metadata.get("LicenseShortName"), dict) else "Wikimedia Commons"
@@ -400,12 +434,12 @@ def _commons_search(query:str,out:Path,limit:int=3,kind:str="video")->list[dict]
     return result
 
 
-def search_commons_videos(query:str,out:Path,limit:int=4)->list[dict]:
-    return _commons_search(query, out, limit, "video")
+def search_commons_videos(query:str,out:Path,limit:int=4,beat:dict|None=None)->list[dict]:
+    return _commons_search(query, out, limit, "video", beat)
 
 
-def search_commons_photos(query:str,out:Path,limit:int=3)->list[dict]:
-    return _commons_search(query, out, limit, "photo")
+def search_commons_photos(query:str,out:Path,limit:int=3,beat:dict|None=None)->list[dict]:
+    return _commons_search(query, out, limit, "photo", beat)
 
 
 def make_asset_plan(sentence:str,editorial:dict|None=None)->list[dict]:
