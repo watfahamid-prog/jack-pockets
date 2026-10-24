@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - experiment/free-local-engines-before-qwen
   pull_request:
     branches: [main]
 
