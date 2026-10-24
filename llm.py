@@ -272,19 +272,40 @@ def _qwen(topic: str, research: list[dict] | None = None) -> dict:
         timeout=float(os.getenv("QWEN_TIMEOUT_SECONDS", "300")),
         max_retries=0,
     )
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": SYSTEM},
-            {"role": "user", "content": _research_prompt(topic, research)},
-        ],
-        temperature=0.4,
-        max_tokens=int(os.getenv("QWEN_MAX_TOKENS", "9000")),
-    )
-    content = response.choices[0].message.content
-    plan = _normalize_plan(_parse_json(content), topic)
-    print(f"[llm] Qwen succeeded with model {model} at {base_url}", flush=True)
-    return plan
+    prompt = _research_prompt(topic, research)
+    for attempt in range(2):
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": SYSTEM},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.4 if attempt == 0 else 0.25,
+            max_tokens=int(os.getenv("QWEN_MAX_TOKENS", "9000")),
+        )
+        content = response.choices[0].message.content
+        try:
+            plan = _normalize_plan(_parse_json(content), topic)
+        except ValueError as exc:
+            message = str(exc).lower()
+            too_short = any(marker in message for marker in ("narration words", "usable beats", "need at least 8"))
+            if attempt == 0 and too_short:
+                prompt += (
+                    "\\n\\nLENGTH REPAIR — the previous plan did not meet the long-form requirements. "
+                    "Return a complete revised JSON plan with 10-12 beats, about 150-190 words of narration "
+                    "per beat, and at least 1,500 spoken words total. Keep the story original and coherent; "
+                    "do not pad with repeated ideas. Keep at least two specific searchable keywords per beat "
+                    "and use only exact source URLs from the supplied research. Output valid JSON only."
+                )
+                print(
+                    f"[llm] Qwen returned a short plan; retrying with explicit length targets: {exc}",
+                    flush=True,
+                )
+                continue
+            raise
+        print(f"[llm] Qwen succeeded with model {model} at {base_url}", flush=True)
+        return plan
+    raise RuntimeError("Qwen failed to produce a valid long-form documentary plan after the length-repair retry")
 
 
 def generate(topic: str, research: list[dict] | None = None) -> dict:
