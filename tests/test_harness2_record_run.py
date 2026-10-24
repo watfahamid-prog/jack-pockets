@@ -1,4 +1,3 @@
-import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -7,8 +6,8 @@ from harness2.record_run import render_memory, summarize, update_ledger
 
 
 class Harness2RunFeedbackTests(unittest.TestCase):
-    def test_detects_quality_gate_failure_and_recurring_issue(self):
-        text = "QUALITY GATE FAILED:\\nfootage gate: only 2 distinct real video clips selected; need at least 6\\nstatic-image gate: photos fill 20% of shots; maximum is 15%\\n"
+    def test_detects_quality_gate_failure(self):
+        text = "QUALITY GATE FAILED:\nfootage gate: only 2 distinct real video clips selected; need at least 6\nstatic-image gate: photos fill 20% of shots; maximum is 15%\n"
         result = summarize(text, None)
         self.assertEqual(result["status"], "failed")
         self.assertEqual(len(result["observations"]), 2)
