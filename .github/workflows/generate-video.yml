@@ -7,7 +7,11 @@ on:
         description: "Original documentary topic"
         required: true
         type: string
-        default: "The 1997 AS 7007 Internet Routing Incident: How One Router Disrupted Internet Traffic"
+        default: "What Is the Most Expensive Thing Ever?"
+  # Temporary audit-only trigger; this branch is never merged into main.
+  push:
+    branches:
+      - audit/full-documentary-render
 
 permissions:
   contents: read
@@ -85,7 +89,7 @@ jobs:
           PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
           MUSIC_URL: ${{ secrets.MUSIC_URL }}
-          DOCUMENTARY_TOPIC: ${{ inputs.topic }}
+          DOCUMENTARY_TOPIC: ${{ inputs.topic || 'What Is the Most Expensive Thing Ever?' }}
         run: python generate.py --topic "$DOCUMENTARY_TOPIC" --assets-per-beat 2
 
       # Save useful research/plan/audio cache entries even when the quality gate
