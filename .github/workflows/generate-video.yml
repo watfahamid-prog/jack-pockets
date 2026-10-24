@@ -18,6 +18,8 @@ concurrency:
 
 jobs:
   generate:
+    env:
+      DOCUMENTARY_TOPIC: ${{ inputs.topic }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -47,8 +49,18 @@ jobs:
 
       - name: Install FFmpeg
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
+          if command -v ffmpeg >/dev/null 2>&1; then
+            ffmpeg -version
+          elif timeout 90 sudo apt-get update && timeout 90 sudo apt-get install -y ffmpeg; then
+            ffmpeg -version
+          else
+            python -m pip install imageio-ffmpeg
+            mkdir -p "$RUNNER_TEMP/ffmpeg-bin"
+            FFMPEG_PATH="$(python -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())')"
+            ln -sf "$FFMPEG_PATH" "$RUNNER_TEMP/ffmpeg-bin/ffmpeg"
+            echo "$RUNNER_TEMP/ffmpeg-bin" >> "$GITHUB_PATH"
+            "$RUNNER_TEMP/ffmpeg-bin/ffmpeg" -version
+          fi
 
       - name: Install Node dependencies
         run: npm ci
@@ -85,7 +97,6 @@ jobs:
           PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
           MUSIC_URL: ${{ secrets.MUSIC_URL }}
-          DOCUMENTARY_TOPIC: ${{ inputs.topic }}
         run: python generate.py --topic "$DOCUMENTARY_TOPIC" --assets-per-beat 2
 
       # Save useful research/plan/audio cache entries even when the quality gate
