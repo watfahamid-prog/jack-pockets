@@ -258,11 +258,39 @@ def _anthropic(topic: str, research: list[dict] | None = None) -> dict:
     return _normalize_plan(_parse_json(response.content[0].text), topic)
 
 
+
+def _qwen(topic: str, research: list[dict] | None = None) -> dict:
+    """Use an OpenAI-compatible Qwen endpoint; defaults to local Ollama with no paid fallback."""
+    from openai import OpenAI
+
+    base_url = (os.getenv("QWEN_BASE_URL") or "http://localhost:11434/v1").strip()
+    model = (os.getenv("QWEN_MODEL") or "qwen3:4b").strip()
+    api_key = (os.getenv("QWEN_API_KEY") or "ollama").strip()
+    client = OpenAI(
+        base_url=base_url,
+        api_key=api_key,
+        timeout=float(os.getenv("QWEN_TIMEOUT_SECONDS", "300")),
+        max_retries=0,
+    )
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": SYSTEM},
+            {"role": "user", "content": _research_prompt(topic, research)},
+        ],
+        temperature=0.4,
+    )
+    content = response.choices[0].message.content
+    plan = _normalize_plan(_parse_json(content), topic)
+    print(f"[llm] Qwen succeeded with model {model} at {base_url}", flush=True)
+    return plan
+
+
 def generate(topic: str, research: list[dict] | None = None) -> dict:
     from cache_utils import load_json_cache, save_json_cache
 
     provider = os.getenv("LLM_PROVIDER", "auto").lower()
-    order = {"gemini": ["gemini"], "openai": ["openai"], "anthropic": ["anthropic"], "auto": ["gemini", "openai", "anthropic"]}.get(provider, ["gemini", "openai", "anthropic"])
+    order = {"gemini": ["gemini"], "openai": ["openai"], "anthropic": ["anthropic"], "qwen": ["qwen"], "auto": ["gemini", "openai", "anthropic"]}.get(provider, ["gemini", "openai", "anthropic"])
     cache_payload = {
         "topic": topic.strip(),
         "research": research or [],
@@ -271,12 +299,15 @@ def generate(topic: str, research: list[dict] | None = None) -> dict:
             "gemini": bool(os.getenv("GEMINI_API_KEY", "").strip()),
             "openai": bool(os.getenv("OPENAI_API_KEY", "").strip()),
             "anthropic": bool(os.getenv("ANTHROPIC_API_KEY", "").strip()),
+            "qwen": bool(os.getenv("QWEN_API_KEY", "").strip()) or (os.getenv("QWEN_BASE_URL", "http://localhost:11434/v1").startswith(("http://localhost", "http://127.0.0.1"))),
         },
         "models": {
             "gemini": os.getenv("GEMINI_MODEL", "gemini-3.8-flash"),
             "gemini_fallbacks": os.getenv("GEMINI_FALLBACK_MODELS", "gemini-3.6-flash,gemini-3.5-flash-lite"),
             "openai": os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
             "anthropic": os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5-5"),
+            "qwen": os.getenv("QWEN_MODEL", "qwen3:4b"),
+            "qwen_base_url": os.getenv("QWEN_BASE_URL", "http://localhost:11434/v1"),
         },
         "editorial_prompt_version": 4,
     }
@@ -298,6 +329,8 @@ def generate(topic: str, research: list[dict] | None = None) -> dict:
                 plan = _openai(topic, research)
             elif name == "anthropic" and os.getenv("ANTHROPIC_API_KEY"):
                 plan = _anthropic(topic, research)
+            elif name == "qwen":
+                plan = _qwen(topic, research)
             else:
                 continue
             save_json_cache("documentary-plan", cache_payload, plan)
@@ -307,4 +340,4 @@ def generate(topic: str, research: list[dict] | None = None) -> dict:
             print(f"[llm] {name} failed: {exc}", flush=True)
     if attempted:
         raise RuntimeError("No configured LLM produced a valid long-form plan. " + " | ".join(attempted))
-    raise RuntimeError("No LLM API key is configured. Set GEMINI_API_KEY or another supported provider secret.")
+    raise RuntimeError("No LLM provider is configured. Set GEMINI_API_KEY or another supported provider; for local Qwen, set LLM_PROVIDER=qwen and start the configured OpenAI-compatible local server.")
