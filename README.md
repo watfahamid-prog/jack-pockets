@@ -10,7 +10,7 @@ Topic → research → long-form story plan → narration → word alignment →
 
 ## Run locally
 
-Requirements: Python 3.11, Node.js 20, FFmpeg, and at least one supported LLM API key.
+Requirements: Python 3.11, Node.js 20, FFmpeg, and either a supported hosted LLM API key or the experimental local Qwen provider (Ollama).
 
 ```bash
 npm install
@@ -27,10 +27,12 @@ Use `.github/workflows/generate-video.yml` and run **Generate Jack Pockets Style
 
 ## Providers
 
-Required: at least one LLM provider key:
+For `LLM_PROVIDER=auto`, configure at least one hosted provider key:
 - `GEMINI_API_KEY`
 - `OPENAI_API_KEY`
 - `ANTHROPIC_API_KEY`
+
+For a no-API-key local experiment, set `LLM_PROVIDER=qwen` and configure Ollama as documented in `QWEN.md`. Qwen is not selected by `auto` and remains opt-in.
 
 Recommended for real footage:
 - `PEXELS_API_KEY`
@@ -95,16 +97,17 @@ The public Jack Pockets reference video is treated as a **visual/editorial basel
 
 Continuous validation compiles Python modules before a generation run reaches API calls.
 
-## Optional local-engine experiments (Qwen deliberately deferred)
+## Optional local-engine experiments (opt-in)
 
 The default production path remains unchanged. Experimental engines are opt-in and should be benchmarked on a real episode before being made defaults.
 
 - **WhisperX alignment:** install only `requirements-whisperx.txt`, then set `JACKPOCKETS_ALIGNER=whisperx`. It runs on CPU in this configuration and may be slower; Faster-Whisper remains the default.
 - **Kokoro local narration:** install `requirements-kokoro.txt` and set `TTS_PROVIDER=kokoro`. This explicitly selects local narration and does not fall back to paid TTS APIs if Kokoro fails. The first run may download model/voice assets.
 - **Piper local narration:** set `TTS_PROVIDER=piper` to explicitly use the existing local Piper path.
+- **Local Qwen AI Director:** install Ollama, pull `qwen3:4b`, and follow `QWEN.md` to run `python qwen_smoke_test.py --topic "What Is the Most Expensive Thing Ever?"`. This tests a plan only; it does not render a video. `LLM_PROVIDER=qwen` explicitly selects Qwen, while `LLM_PROVIDER=auto` preserves the normal provider order.
 - **Local semantic footage reranking:** set `JACKPOCKETS_SEMANTIC_RANKING=1`. Install `requirements-semantic-ranking.txt`; this downloads the configured sentence-transformer model on first use and adds semantic similarity to the existing lexical/reuse score. If the optional dependency or model fails, the pipeline logs the issue and uses the existing lexical ranker.
 - **Finished-video diagnostics:** run `python video_qc.py out/your-video.mp4 --out out/video-qc.json`, or set `JACKPOCKETS_VIDEO_QC=1` to save diagnostics during generation. FFmpeg/FFprobe inspect stream metadata and long black segments; PySceneDetect adds scene-cut timings when installed (install `requirements-scene-qc.txt`). This is diagnostic only and never edits the video.
 
-Do not install every optional package blindly on a low-memory machine. WhisperX/PyTorch is a large install, and the local tools use your computer's CPU/GPU and electricity. Optional engines are not yet approved for production until a fresh output has been measured and visually inspected. **Qwen local-LLM integration is available as an opt-in experiment only; see `QWEN.md`.** It is not production-approved until targeted tests, a local real-model smoke test, and a baseline-versus-Qwen documentary comparison all pass review.
+Do not install every optional package blindly on a low-memory machine. WhisperX/PyTorch is a large install, and the local tools use your computer's CPU/GPU and electricity. Optional engines are not yet approved for production until a fresh output has been measured and visually inspected. Qwen remains experimental until targeted tests, a local real-model smoke test, and a baseline-versus-Qwen documentary comparison all pass review; see `QWEN.md`.
 
 Install only the one optional requirements file for the experiment you are running. Do not install WhisperX, Kokoro, scene detection, and semantic ranking together by default; their dependencies and model downloads are independent.

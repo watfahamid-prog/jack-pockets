@@ -36,6 +36,25 @@ This is an **opt-in experiment**, not a production default. The existing Gemini/
 
 The Qwen model runs on your own machine; no Qwen API key or paid API call is required for local Ollama. It uses your computer's memory, processing power, storage, and electricity. A 4B model is a small baseline for testing, not a claim that it will outperform the current production model.
 
+
+### Windows troubleshooting: `ollama` is not recognized
+
+If PowerShell says `ollama` is not recognized after installation, close and reopen PowerShell first. Then check the standard per-user install path:
+
+```powershell
+Test-Path "$env:LOCALAPPDATA\Programs\Ollama\ollama.exe"
+```
+
+If it returns `True`, invoke Ollama by its full path while Windows PATH is being refreshed or repaired:
+
+```powershell
+& "$env:LOCALAPPDATA\Programs\Ollama\ollama.exe" --version
+& "$env:LOCALAPPDATA\Programs\Ollama\ollama.exe" pull qwen3:4b
+& "$env:LOCALAPPDATA\Programs\Ollama\ollama.exe" run qwen3:4b "Explain what makes a documentary interesting."
+```
+
+If the test returns `False`, check **Settings → Apps → Installed apps** for Ollama and install it from the official Windows download page before continuing.
+
 ## Hosted Qwen endpoint (optional)
 
 If later using a hosted OpenAI-compatible Qwen endpoint, set `QWEN_BASE_URL`, `QWEN_MODEL`, and store the endpoint's key in your local `.env` or a GitHub Actions secret. Hosted inference may cost money. Do not commit keys or put them in this file.
