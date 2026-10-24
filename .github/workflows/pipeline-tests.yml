@@ -37,3 +37,6 @@ jobs:
 
       - name: Validate local Qwen smoke-test CLI
         run: python qwen_smoke_test.py --help
+
+      - name: Test workflow input safety
+        run: python -m unittest discover -s tests -p "test_workflow_safety.py" -v
