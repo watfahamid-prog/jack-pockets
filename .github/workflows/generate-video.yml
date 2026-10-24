@@ -89,8 +89,8 @@ jobs:
           PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
           MUSIC_URL: ${{ secrets.MUSIC_URL }}
-          DOCUMENTARY_TOPIC: ${{ inputs.topic || 'What Is the Most Expensive Thing Ever?' }}
-        run: python generate.py --topic "$DOCUMENTARY_TOPIC" --assets-per-beat 2
+          DOCUMENTARY_TOPIC: ${{ inputs.topic }}
+        run: python generate.py --topic "${DOCUMENTARY_TOPIC:-What Is the Most Expensive Thing Ever?}" --assets-per-beat 2
 
       # Save useful research/plan/audio cache entries even when the quality gate
       # rejects a run. Otherwise failed generation attempts never persist cache data.
