@@ -98,6 +98,7 @@ jobs:
           PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
           MUSIC_URL: ${{ secrets.MUSIC_URL }}
+          JACKPOCKETS_VIDEO_QC: "1"
         run: |
           set -o pipefail
           python generate.py --topic "$DOCUMENTARY_TOPIC" --assets-per-beat 2 2>&1 | tee "$RUNNER_TEMP/jack-pockets-generate.log"
@@ -144,6 +145,7 @@ jobs:
             public/runs/**/research.json
             public/runs/**/render-props.json
             public/runs/**/alignment.json
+            public/runs/**/video-qc.json
             public/runs/**/narration.mp3
             public/runs/**/music-bed.json
             harness2-learning-report.json
