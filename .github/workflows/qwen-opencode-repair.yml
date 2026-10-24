@@ -1,0 +1,157 @@
+name: Qwen + OpenCode AI repair (isolated PR)
+
+on:
+  push:
+    branches: [qwen-opencode-repair-now, main]
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "Specific repair task for the agent"
+        required: true
+        type: string
+        default: "Fix F-23 (unbounded music downloads) and F-8 (captions may never appear). Inspect the actual code first, make the smallest safe fixes, add regression tests, and do not change unrelated files."
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: qwen-opencode-repair
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - name: Check out current main as the repair base
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install repository dependencies
+        run: |
+          npm ci
+          python -m pip install -r requirements.txt
+          python -m pip install -r requirements-qwen.txt
+
+      - name: Install Ollama and start local service
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://ollama.com/install.sh -o "$RUNNER_TEMP/ollama-install.sh"
+          sh "$RUNNER_TEMP/ollama-install.sh"
+          (ollama serve > "$RUNNER_TEMP/ollama.log" 2>&1 & echo $! > "$RUNNER_TEMP/ollama.pid")
+          for attempt in $(seq 1 60); do
+            if curl --silent --fail http://127.0.0.1:11434/api/tags >/dev/null; then break; fi
+            sleep 2
+          done
+          curl --silent --fail http://127.0.0.1:11434/api/tags
+          ollama pull qwen3:4b
+
+      - name: Install OpenCode
+        run: npm install --global opencode-ai
+
+      - name: Create isolated repair branch
+        id: branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          BRANCH="qwen-opencode/repair-$GITHUB_RUN_ID"
+          git switch -c "$BRANCH"
+          echo "name=$BRANCH" >> "$GITHUB_OUTPUT"
+          opencode --version | tee "$RUNNER_TEMP/opencode-version.log"
+
+      - name: Ask OpenCode + local Qwen to implement the requested repair
+        shell: bash
+        env:
+          OLLAMA_HOST: http://127.0.0.1:11434
+          REPAIR_TASK: ${{ inputs.task || 'Fix F-23 (unbounded music downloads) and F-8 (captions may never appear). Inspect the actual code first, make the smallest safe fixes, add regression tests, and do not change unrelated files.' }}
+          SUMMARY_PATH: ${{ runner.temp }}/repair-summary.md
+        run: |
+          set -euo pipefail
+          printf '%s\n' \
+            "Repository repair task:" \
+            "$REPAIR_TASK" \
+            "" \
+            "Requirements:" \
+            "- Inspect existing implementation and tests before editing; do not guess filenames or behavior." \
+            "- Make the smallest correct change addressing the requested task, and add focused regression tests." \
+            "- Do not modify unrelated files, secrets, workflow configuration, dependencies, or lockfiles unless the task demonstrably requires it." \
+            "- Do not call paid APIs or use external inference services. Use the local Ollama model only." \
+            "- Do not claim tests passed unless you run them." \
+            "- Write a concise summary of changed files, root cause, and commands run to: $SUMMARY_PATH" \
+            "- If the task is unsafe or cannot be completed, explain why and do not fabricate a fix." \
+            > "$RUNNER_TEMP/agent-task.txt"
+          timeout 35m opencode run --model ollama/qwen3:4b "$(cat "$RUNNER_TEMP/agent-task.txt")" 2>&1 | tee "$RUNNER_TEMP/opencode-repair.log"
+          git diff --check
+          if git status --porcelain | grep -E "^[ MARCUD?!]{2} \.github/workflows/|^[ MARCUD?!]{2} requirements[^/]*$"; then
+            echo "Agent changed a workflow or dependency manifest; refusing to publish it automatically." >&2
+            exit 1
+          fi
+          git add -N .
+          git status --short
+          git diff --stat | tee "$RUNNER_TEMP/repair-diff-stat.txt"
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "OpenCode produced no repository changes; refusing to create an empty repair PR." >&2
+            exit 1
+          fi
+          git diff --binary > "$RUNNER_TEMP/qwen-opencode-repair.patch"
+
+      - name: Compile Python
+        run: python -m compileall -q .
+
+      - name: Run full Python regression suite
+        run: python -m unittest discover -s tests -v
+
+      - name: Typecheck Remotion
+        run: npm run typecheck
+
+      - name: Commit and open an isolated pull request
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          REPAIR_BRANCH: ${{ steps.branch.outputs.name }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: Qwen/OpenCode automated repair"
+          git push --set-upstream origin "$REPAIR_BRANCH"
+          cat > "$RUNNER_TEMP/pr-body.md" <<'BODY'
+          This pull request was prepared by the isolated Qwen + OpenCode repair workflow.
+
+          - The local Qwen model runs through Ollama; no paid inference API is configured.
+          - The change is isolated on a dedicated branch; `main` is not modified by the agent.
+          - Python compilation, the full Python unittest suite, and Remotion typecheck must pass before this PR is opened.
+          - Review the diff and CI results before merging.
+          BODY
+          gh pr create --repo "$GH_REPO" --head "$REPAIR_BRANCH" --base main --title "fix: Qwen/OpenCode repair" --body-file "$RUNNER_TEMP/pr-body.md"
+
+      - name: Upload agent logs and patch for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qwen-opencode-repair-evidence-${{ github.run_number }}
+          path: |
+            ${{ runner.temp }}/ollama.log
+            ${{ runner.temp }}/opencode-version.log
+            ${{ runner.temp }}/opencode-repair.log
+            ${{ runner.temp }}/repair-summary.md
+            ${{ runner.temp }}/repair-diff-stat.txt
+            ${{ runner.temp }}/qwen-opencode-repair.patch
+          if-no-files-found: warn
+          retention-days: 14
