@@ -272,6 +272,28 @@ class ResearchRelevanceTests(unittest.TestCase):
             "https://www.wired.com/1997/04/net-outage-the-oops-heard-round-the-world/",
         ])
 
+    def test_specific_contemporary_source_outranks_general_paper(self):
+        sources = [
+            {
+                "url": "https://crypto.stanford.edu/cs155old/cs155-spring10/papers/BGP-security.pdf",
+                "title": "A Survey of BGP Security",
+                "content": "BGP security and routing protocol mechanisms.",
+            },
+            {
+                "url": "https://www.wired.com/1997/04/net-outage-the-oops-heard-round-the-world/",
+                "title": "Net Outage: The Oops Heard Round the World",
+                "content": "On April 25, 1997, AS 7007 caused a router routing incident and Internet outage.",
+            },
+        ]
+        result = _relevant_sources(
+            "AS 7007 routing incident",
+            {"title": "The April 1997 Black Hole", "narration": "A router leaked routes and disrupted the network."},
+            sources,
+            limit=2,
+        )
+        self.assertEqual(result[0], "https://www.wired.com/1997/04/net-outage-the-oops-heard-round-the-world/")
+        self.assertIn("https://crypto.stanford.edu/cs155old/cs155-spring10/papers/BGP-security.pdf", result)
+
     def test_rejects_substring_only_source_match(self):
         sources = [
             {
