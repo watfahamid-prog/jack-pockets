@@ -2,7 +2,7 @@ name: Verify Qwen and OpenCode (experimental)
 
 on:
   push:
-    branches: [main, verify-qwen-opencode]
+    branches: [verify-qwen-opencode]
   workflow_dispatch:
     inputs:
       topic:
