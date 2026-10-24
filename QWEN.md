@@ -18,7 +18,15 @@ This is an **opt-in experiment**, not a production default. The existing Gemini/
    QWEN_API_KEY=
    ```
 
-5. From the repository root, run the dedicated plan-only smoke test:
+5. From the repository root, install only the small dependency set needed for this plan-only test:
+
+   ```powershell
+   python -m pip install -r requirements-qwen.txt
+   ```
+
+   This avoids installing the full pipeline dependencies (such as transcription/TTS libraries) just to test Qwen.
+
+6. Run the dedicated plan-only smoke test:
 
    ```powershell
    python qwen_smoke_test.py --topic "What Is the Most Expensive Thing Ever?"
@@ -26,7 +34,7 @@ This is an **opt-in experiment**, not a production default. The existing Gemini/
 
    This calls Qwen directly, saves the plan to `out/qwen-smoke-test-plan.json`, and does not render a video or change the production provider selection. It checks that the model returns a structurally valid plan with 8–14 beats and at least 1,400 narration words. Without a research packet, it tests connectivity and structure only—not factual accuracy.
 
-6. For a meaningful baseline comparison, supply the same research packet used by the existing provider:
+7. For a meaningful baseline comparison, supply the same research packet used by the existing provider:
 
    ```powershell
    python qwen_smoke_test.py --topic "What Is the Most Expensive Thing Ever?" --research path\to\research.json --output out\qwen-plan.json
