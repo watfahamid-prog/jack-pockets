@@ -218,6 +218,40 @@ class ResearchRelevanceTests(unittest.TestCase):
         )
         self.assertEqual(result, ["https://example.org/router-incident"])
 
+    def test_prioritizes_authoritative_sources_over_wikipedia_and_blogs(self):
+        sources = [
+            {
+                "url": "https://blog.crawlex.net/blog/bgp-hijacks-route-leaks/",
+                "title": "BGP hijacks and route leaks",
+                "content": "AS 7007 router network routing incident April 1997.",
+            },
+            {
+                "url": "https://en.wikipedia.org/wiki/AS_7007_incident",
+                "title": "AS 7007 incident",
+                "content": "Router network routing incident April 1997.",
+            },
+            {
+                "url": "https://nanog.org/stories/articles/a-brief-history-of-the-internets-biggest-bgp-incidents/",
+                "title": "A Brief History of the Internet's Biggest BGP Incidents",
+                "content": "AS 7007 router network routing incident in April 1997.",
+            },
+            {
+                "url": "https://www.wired.com/1997/04/net-outage-the-oops-heard-round-the-world/",
+                "title": "Net Outage: The Oops Heard Round the World",
+                "content": "April 1997 AS 7007 router network routing incident.",
+            },
+        ]
+        result = _relevant_sources(
+            "AS 7007 routing incident",
+            {"title": "The April 1997 Black Hole", "narration": "The router leaked network routes."},
+            sources,
+            limit=3,
+        )
+        self.assertEqual(result, [
+            "https://nanog.org/stories/articles/a-brief-history-of-the-internets-biggest-bgp-incidents/",
+            "https://www.wired.com/1997/04/net-outage-the-oops-heard-round-the-world/",
+        ])
+
     def test_rejects_substring_only_source_match(self):
         sources = [
             {
