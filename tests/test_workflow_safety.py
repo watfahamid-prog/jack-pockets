@@ -10,7 +10,8 @@ class WorkflowSafetyTests(unittest.TestCase):
         workflow = (ROOT / ".github" / "workflows" / "generate-video.yml").read_text(
             encoding="utf-8"
         )
-        self.assertIn("DOCUMENTARY_TOPIC: ${{ inputs.topic ||", workflow)
+        self.assertIn('DOCUMENTARY_TOPIC: "The 1997 AS 7007 Internet Routing Incident: How One Router Disrupted Internet Traffic"', workflow)
+        self.assertIn("INPUT_TOPIC: ${{ inputs.topic }}", workflow)
         self.assertIn('python generate.py --topic "$DOCUMENTARY_TOPIC" --assets-per-beat 2 2>&1 | tee "$RUNNER_TEMP/jack-pockets-generate.log"', workflow)
         self.assertIn("set -o pipefail", workflow)
         self.assertIn("Record Harness² run feedback", workflow)
