@@ -18,15 +18,18 @@ def render(manifest_path: Path, output_dir: Path) -> None:
     components = data["components"]
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    skill_triggers = [
+        f"- When the {name} workflow applies, load the `{_slug(name)}` skill."
+        for name in components["skills"]
+    ]
+    guardrails = "# Jack Pockets guardrails\n\n" + "\n".join(
+        [*(f"- {item}" for item in components["guardrails"]), *skill_triggers]
+    ) + "\n"
+
     (output_dir / "systemprompt.md").write_text(
         str(components["system_prompt"]).strip() + "\n", encoding="utf-8"
     )
-    (output_dir / "guardrails.md").write_text(
-        "# Jack Pockets guardrails\n\n"
-        + "\n".join(f"- {item}" for item in components["guardrails"])
-        + "\n",
-        encoding="utf-8",
-    )
+    (output_dir / "guardrails.md").write_text(guardrails, encoding="utf-8")
     (output_dir / "LongTermMEMORY.md").write_text(
         str(components["memory"]).strip() + "\n", encoding="utf-8"
     )
