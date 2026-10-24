@@ -89,6 +89,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          touch "$RUNNER_TEMP/jack-pockets-generate.log"
           curl -fsSL https://ollama.com/install.sh -o "$RUNNER_TEMP/ollama-install.sh"
           sh "$RUNNER_TEMP/ollama-install.sh"
           (ollama serve > "$RUNNER_TEMP/ollama.log" 2>&1 & echo $! > "$RUNNER_TEMP/ollama.pid")
