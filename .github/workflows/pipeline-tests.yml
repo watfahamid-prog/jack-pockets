@@ -34,3 +34,6 @@ jobs:
 
       - name: Test Qwen provider without calling a model
         run: python -m unittest discover -s tests -p "test_qwen_provider.py" -v
+
+      - name: Validate local Qwen smoke-test CLI
+        run: python qwen_smoke_test.py --help

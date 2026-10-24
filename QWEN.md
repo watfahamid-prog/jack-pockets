@@ -8,19 +8,33 @@ This is an **opt-in experiment**, not a production default. The existing Gemini/
 
 1. Install Ollama on your Windows PC from https://ollama.com/download.
 2. In a terminal, run `ollama pull qwen3:4b`.
-3. Ensure Ollama is running, then check `http://localhost:11434` is available locally.
+3. Ensure Ollama is running. Its local service should be available at `http://localhost:11434`.
 4. In a local copy of this repository, set these variables in `.env`:
 
    ```dotenv
-   LLM_PROVIDER=qwen
+   LLM_PROVIDER=auto
    QWEN_BASE_URL=http://localhost:11434/v1
    QWEN_MODEL=qwen3:4b
    QWEN_API_KEY=
    ```
 
-5. Run the pipeline's existing validation/tests first, then run a small generation locally and inspect the plan before trying a full documentary.
+5. From the repository root, run the dedicated plan-only smoke test:
 
-The Qwen model runs on your own machine; no Qwen API key or paid API call is required for local Ollama. It will use your computer's memory, processing power, storage, and electricity. A 4B model is a small baseline for testing, not a claim that it will outperform the current production model.
+   ```powershell
+   python qwen_smoke_test.py --topic "What Is the Most Expensive Thing Ever?"
+   ```
+
+   This calls Qwen directly, saves the plan to `out/qwen-smoke-test-plan.json`, and does not render a video or change the production provider selection. It checks that the model returns a structurally valid plan with 8–14 beats and at least 1,400 narration words. Without a research packet, it tests connectivity and structure only—not factual accuracy.
+
+6. For a meaningful baseline comparison, supply the same research packet used by the existing provider:
+
+   ```powershell
+   python qwen_smoke_test.py --topic "What Is the Most Expensive Thing Ever?" --research path\to\research.json --output out\qwen-plan.json
+   ```
+
+   Inspect source support, factual accuracy, narration repetition, and visual keyword specificity before trying a full documentary.
+
+The Qwen model runs on your own machine; no Qwen API key or paid API call is required for local Ollama. It uses your computer's memory, processing power, storage, and electricity. A 4B model is a small baseline for testing, not a claim that it will outperform the current production model.
 
 ## Hosted Qwen endpoint (optional)
 
