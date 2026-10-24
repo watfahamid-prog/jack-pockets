@@ -98,6 +98,18 @@ def _asset_search_queries(beat: dict, limit: int = 4) -> list[str]:
     # (and bounded) so providers can return relevant clips for each visual idea.
     candidates = []
 
+    stopwords = {
+        "the", "and", "for", "with", "from", "that", "this", "then", "they",
+        "their", "there", "into", "about", "after", "before", "what", "when",
+        "where", "which", "while", "would", "could", "should", "have", "been",
+        "were", "was", "are", "has", "had", "most", "more", "than", "true",
+        "cost", "story", "conclusion", "emerging", "frontier", "explained",
+        "revealed", "reveals", "secret", "secrets", "journey", "future", "human",
+        "ambition", "footage", "video", "scene", "cinematic", "beautiful",
+        "dramatic", "sequence", "sweeping", "view", "views", "shot", "shots",
+        "archival", "contemporary", "establishing", "contrasted", "generated",
+    }
+
     def concise_phrase(value: str) -> str:
         tokens = re.findall(r"[a-zA-Z0-9]{3,}", value)
         concrete = [token for token in tokens if token.lower() not in stopwords and not token.isdigit()]
