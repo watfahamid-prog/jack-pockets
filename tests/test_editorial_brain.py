@@ -36,18 +36,18 @@ class FootageMatchingTests(unittest.TestCase):
     def test_shots_select_sentence_relevant_assets(self):
         beat = {
             "id": "beat-1", "start": 0, "end": 8,
-            "narration": "Titanic wreck footage shows the ship. Mountain hiking is unrelated.",
+            "narration": "Titanic wreck footage shows the ship. Titanic wreckage rests underwater.",
             "assets": [
                 {"id": "ship", "kind": "video", "title": "Titanic wreck footage",
-                 "description": "ship underwater", "tags": []},
-                {"id": "mountain", "kind": "video", "title": "Mountain hiking",
-                 "description": "walking outdoors", "tags": []},
+                 "description": "ship and wreck underwater", "tags": []},
+                {"id": "underwater", "kind": "video", "title": "Underwater Titanic wreck site",
+                 "description": "shipwreck below the surface", "tags": []},
             ],
         }
         result = build_shots(beat)
         self.assertEqual(len(result["shots"]), 2)
         self.assertEqual(result["shots"][0]["assetIds"], ["ship"])
-        self.assertEqual(result["shots"][1]["assetIds"], ["mountain"])
+        self.assertEqual(result["shots"][1]["assetIds"], ["underwater"])
 
     def test_connective_sentence_can_use_strongly_beat_relevant_video(self):
         beat = {
@@ -59,11 +59,52 @@ class FootageMatchingTests(unittest.TestCase):
                 {"id": "auction-video", "kind": "video",
                  "title": "Rare emerald necklace auction footage",
                  "description": "", "tags": []},
+                {"id": "auction-room", "kind": "video",
+                 "title": "Emerald necklace auction room",
+                 "description": "Auction room with a rare jewel display", "tags": []},
             ],
         }
         shots = build_shots(beat)["shots"]
         self.assertEqual(len(shots), 2)
-        self.assertEqual(shots[1]["assetIds"], ["auction-video"])
+        self.assertEqual(shots[0]["assetIds"], ["auction-video"])
+        self.assertEqual(shots[1]["assetIds"], ["auction-room"])
+
+    def test_beat_context_uses_curated_keywords_after_the_title(self):
+        beat = {
+            "id": "beat-context-keywords", "start": 0, "end": 8,
+            "title": "The Explanation and Apology",
+            "keywords": [
+                "nanog mailing list text email archive screenshot",
+                "1990s desktop computer crt monitor",
+                "tech documentation manual close up",
+            ],
+            "narration": "It was posted publicly. That became the record.",
+            "assets": [
+                {"id": "nanog", "kind": "video", "title": "NANOG mailing list email archive",
+                 "description": "Early internet mailing list", "tags": []},
+                {"id": "computer", "kind": "video", "title": "1990s desktop computer CRT monitor",
+                 "description": "A vintage computer workstation", "tags": []},
+            ],
+        }
+        shots = build_shots(beat)["shots"]
+        self.assertEqual(shots[0]["assetIds"], ["nanog"])
+        self.assertEqual(shots[1]["assetIds"], ["computer"])
+
+    def test_single_clip_is_not_reused_on_adjacent_shots(self):
+        beat = {
+            "id": "beat-single-clip", "start": 0, "end": 8,
+            "title": "Rare emerald necklace auction",
+            "keywords": ["emerald necklace auction"],
+            "narration": "Rare emerald necklace sold at auction. That changed everything.",
+            "assets": [
+                {"id": "auction-video", "kind": "video",
+                 "title": "Rare emerald necklace auction footage",
+                 "description": "", "tags": []},
+            ],
+        }
+        shots = build_shots(beat)["shots"]
+        self.assertEqual(shots[0]["assetIds"], ["auction-video"])
+        self.assertEqual(shots[1]["assetIds"], [])
 
     def test_weak_assets_are_not_used_as_random_filler(self):
         beat = {
