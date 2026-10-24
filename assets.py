@@ -27,6 +27,19 @@ def _get(url:str,key:str,params:dict)->dict:
     return r.json()
 
 MAX_ASSET_DOWNLOAD_BYTES = 125_000_000
+MAX_TOTAL_ASSET_DOWNLOAD_BYTES = max(
+    1,
+    int(os.getenv("JACKPOCKETS_MAX_TOTAL_ASSET_DOWNLOAD_BYTES", "1000000000")),
+)
+_ASSET_BYTES_DOWNLOADED = 0
+
+
+def reset_asset_download_budget() -> None:
+    """Reset the episode-wide download counter at the start of a generation run."""
+    global _ASSET_BYTES_DOWNLOADED
+    _ASSET_BYTES_DOWNLOADED = 0
+
+
 
 
 def _archive_title_is_non_broll(title: str, query: str = "") -> bool:
@@ -66,7 +79,14 @@ def _archive_title_is_non_broll(title: str, query: str = "") -> bool:
 
 
 def _download(url, path, max_bytes: int = MAX_ASSET_DOWNLOAD_BYTES):
-    """Download a bounded media file and remove partial files on all failures."""
+    """Download media within both per-file and episode-wide byte budgets."""
+    global _ASSET_BYTES_DOWNLOADED
+    remaining = MAX_TOTAL_ASSET_DOWNLOAD_BYTES - _ASSET_BYTES_DOWNLOADED
+    if remaining <= 0:
+        raise ValueError(
+            f"episode asset download budget exhausted ({MAX_TOTAL_ASSET_DOWNLOAD_BYTES} bytes)"
+        )
+    effective_limit = min(int(max_bytes), remaining)
     headers = {
         "User-Agent": "JackPocketsDocumentary/1.0 (open-media downloader; https://github.com/watfahamid-prog/jack-pockets)"
     }
@@ -76,9 +96,9 @@ def _download(url, path, max_bytes: int = MAX_ASSET_DOWNLOAD_BYTES):
             content_length = response.headers.get("content-length")
             if content_length:
                 try:
-                    if int(content_length) > max_bytes:
+                    if int(content_length) > effective_limit:
                         raise ValueError(
-                            f"media file exceeds size limit ({content_length} > {max_bytes} bytes)"
+                            f"media file exceeds size limit ({content_length} > {effective_limit} bytes)"
                         )
                 except ValueError as exc:
                     if "exceeds size limit" in str(exc):
@@ -89,11 +109,17 @@ def _download(url, path, max_bytes: int = MAX_ASSET_DOWNLOAD_BYTES):
                     if not chunk:
                         continue
                     written += len(chunk)
-                    if written > max_bytes:
+                    if written > effective_limit:
                         raise ValueError(
-                            f"media download exceeded size limit ({written} > {max_bytes} bytes)"
+                            f"media download exceeded size limit ({written} > {effective_limit} bytes)"
                         )
                     handle.write(chunk)
+        _ASSET_BYTES_DOWNLOADED += written
+        print(
+            f"[assets] downloaded={written} bytes episode_total={_ASSET_BYTES_DOWNLOADED}/"
+            f"{MAX_TOTAL_ASSET_DOWNLOAD_BYTES}",
+            flush=True,
+        )
     except Exception:
         path.unlink(missing_ok=True)
         raise

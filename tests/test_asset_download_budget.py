@@ -38,6 +38,32 @@ class BoundedAssetDownloadTests(unittest.TestCase):
 
             self.assertFalse(path.exists())
 
+    def test_download_enforces_episode_wide_budget_across_files(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(assets, "MAX_TOTAL_ASSET_DOWNLOAD_BYTES", 100):
+            assets.reset_asset_download_budget()
+            first = Path(directory) / "first.mp4"
+            second = Path(directory) / "second.mp4"
+            response_one = MagicMock()
+            response_one.__enter__.return_value = response_one
+            response_one.headers = {}
+            response_one.raise_for_status.return_value = None
+            response_one.iter_content.return_value = [b"a" * 60]
+            response_two = MagicMock()
+            response_two.__enter__.return_value = response_two
+            response_two.headers = {}
+            response_two.raise_for_status.return_value = None
+            response_two.iter_content.return_value = [b"b" * 50]
+
+            with patch("assets.requests.get", side_effect=[response_one, response_two]):
+                _download("https://example.test/first.mp4", first, max_bytes=100)
+                with self.assertRaisesRegex(ValueError, "exceeded size limit"):
+                    _download("https://example.test/second.mp4", second, max_bytes=100)
+
+            self.assertEqual(first.stat().st_size, 60)
+            self.assertFalse(second.exists())
+            self.assertEqual(assets._ASSET_BYTES_DOWNLOADED, 60)
+            assets.reset_asset_download_budget()
+
     def test_pexels_unrelated_video_is_rejected_before_download(self):
         def fake_download(_url, path, *_args, **_kwargs):
             Path(path).write_bytes(b"x" * 6000)

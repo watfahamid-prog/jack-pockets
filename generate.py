@@ -9,7 +9,7 @@ import sys
 import time
 from pathlib import Path
 
-from assets import generate_role_asset, make_asset_plan, search_pexels, search_pexels_videos, search_pixabay, search_pixabay_videos, search_commons_videos, search_commons_photos, search_archive_videos
+from assets import generate_role_asset, make_asset_plan, reset_asset_download_budget, search_pexels, search_pexels_videos, search_pixabay, search_pixabay_videos, search_commons_videos, search_commons_photos, search_archive_videos
 from llm import generate
 from manifest import build
 from relevance import _asset_relevance, _asset_search_queries, _relevant_sources
@@ -47,6 +47,7 @@ def main() -> None:
     if args.assets_per_beat < 1 or args.assets_per_beat > 4:
         parser.error("--assets-per-beat must be between 1 and 4")
 
+    reset_asset_download_budget()
     root = Path("public/runs") / slug(args.topic)
     root.mkdir(parents=True, exist_ok=True)
 
