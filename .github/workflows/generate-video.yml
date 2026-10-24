@@ -116,6 +116,7 @@ jobs:
             --ledger "$HOME/.cache/jack-pockets/harness2/experience-ledger.json" \
             --report harness2-learning-report.json \
             --memory harness2-learning-memory.md
+          python harness2/render_native_harness.py --output harness2/native --memory harness2-learning-memory.md
 
       # Save useful research/plan/audio cache entries even when the quality gate
       # rejects a run. Otherwise failed generation attempts never persist cache data.
@@ -142,5 +143,6 @@ jobs:
             public/runs/**/music-bed.json
             harness2-learning-report.json
             harness2-learning-memory.md
+            harness2/native/**
           if-no-files-found: warn
           retention-days: 14
