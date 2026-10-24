@@ -1,4 +1,5 @@
 name: Qwen + OpenCode AI repair (isolated PR)
+# Audit mode starts with a repository-wide evidence report; code fixes are separate tasks.
 
 on:
   push:
