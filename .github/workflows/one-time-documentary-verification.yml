@@ -1,9 +1,7 @@
 name: One-Time Documentary Verification
 
 on:
-  push:
-    paths:
-      - ".github/workflows/one-time-documentary-verification.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
