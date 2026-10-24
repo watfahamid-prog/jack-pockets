@@ -40,6 +40,7 @@ jobs:
         run: python -m pip install -r requirements-qwen.txt
 
       - name: Install Ollama and start local service
+        id: ollama_setup
         shell: bash
         run: |
           set -euo pipefail
@@ -70,9 +71,11 @@ jobs:
           python qwen_smoke_test.py --topic "${{ inputs.topic || 'What Is the Most Expensive Thing Ever?' }}" --output out/qwen-smoke-test-plan.json 2>&1 | tee "$RUNNER_TEMP/qwen-smoke-test.log"
 
       - name: Install OpenCode CLI
+        if: always() && steps.ollama_setup.conclusion == 'success'
         run: npm install --global opencode-ai
 
       - name: Verify OpenCode can use local Qwen and make a test change
+        if: always() && steps.ollama_setup.conclusion == 'success'
         shell: bash
         env:
           OLLAMA_HOST: http://127.0.0.1:11434
