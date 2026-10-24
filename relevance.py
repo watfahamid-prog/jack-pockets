@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from urllib.parse import urlparse
 
 
 def _asset_relevance(query: str, beat: dict, asset: dict) -> tuple[bool, list[str]]:
@@ -56,8 +57,40 @@ def _asset_relevance(query: str, beat: dict, asset: dict) -> tuple[bool, list[st
     found = sorted(target & metadata_terms)
     return bool(query_hits) and bool(found), query_hits
 
+def _source_authority_score(url: str) -> int:
+    """Prefer primary/technical authorities and established journalism over scraped blogs."""
+    host = (urlparse(str(url)).hostname or "").lower().removeprefix("www.")
+    if (
+        host.endswith(".gov")
+        or host.endswith(".edu")
+        or host.endswith(".ac.uk")
+        or host.endswith(".ac.jp")
+        or host.endswith(".ac.nz")
+        or host.endswith(".edu.au")
+        or host in {
+            "nanog.org", "ietf.org", "rfc-editor.org", "arin.net",
+            "ripe.net", "apnic.net", "ieice.org", "stanford.edu",
+        }
+        or host.endswith(".nanog.org")
+        or host.endswith(".ietf.org")
+        or host.endswith(".rfc-editor.org")
+    ):
+        return 4
+    if host in {
+        "wired.com", "reuters.com", "apnews.com", "bbc.com", "arstechnica.com",
+        "nytimes.com", "theguardian.com", "technologyreview.com", "cnet.com",
+    } or any(host.endswith("." + domain) for domain in (
+        "wired.com", "reuters.com", "apnews.com", "bbc.com", "arstechnica.com",
+        "nytimes.com", "theguardian.com", "technologyreview.com", "cnet.com",
+    )):
+        return 3
+    if host.endswith("wikipedia.org"):
+        return 1
+    return 0
+
+
 def _relevant_sources(topic: str, beat: dict, sources: list[dict], limit: int = 3) -> list[str]:
-    """Return only sources whose title/content overlaps the actual beat subject."""
+    """Return relevant sources, prioritizing trustworthy technical and editorial authorities."""
     stopwords = {
         "about", "after", "again", "also", "because", "been", "before", "being",
         "could", "did", "does", "during", "from", "have", "into", "more", "most",
@@ -87,9 +120,16 @@ def _relevant_sources(topic: str, beat: dict, sources: list[dict], limit: int = 
         # Avoid assigning generic or unrelated search results as evidence.
         if len(hits) < 2:
             continue
-        ranked.append((len(hits), str(item["url"])))
-    ranked.sort(key=lambda pair: pair[0], reverse=True)
-    return list(dict.fromkeys(url for _, url in ranked))[:limit]
+        url = str(item["url"])
+        ranked.append((_source_authority_score(url), len(hits), url))
+    if not ranked:
+        return []
+    # When the search found any authoritative sources, do not fill the shortlist
+    # with weaker blogs or encyclopedia mirrors just to reach the requested count.
+    if any(authority >= 2 for authority, _, _ in ranked):
+        ranked = [entry for entry in ranked if entry[0] >= 2]
+    ranked.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    return list(dict.fromkeys(url for _, _, url in ranked))[:limit]
 
 def _asset_search_queries(beat: dict, limit: int = 4) -> list[str]:
     """Create short, subject-first stock-media queries without generic prose."""
