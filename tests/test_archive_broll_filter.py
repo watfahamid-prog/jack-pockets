@@ -8,6 +8,8 @@ class ArchiveBrollFilterTests(unittest.TestCase):
         self.assertTrue(_archive_title_is_non_broll("GeekBeat.TV 387: WiPNET - CES 2012"))
         self.assertTrue(_archive_title_is_non_broll("Boot into OpenWrt Failsafe Mode and reflash a firmware"))
         self.assertTrue(_archive_title_is_non_broll("How to configure a router"))
+        self.assertTrue(_archive_title_is_non_broll("g4tv.com-video3168: Make an Ethernet Cable"))
+        self.assertTrue(_archive_title_is_non_broll("Router firmware configuration guide"))
 
     def test_keeps_general_historical_and_network_footage_titles(self):
         self.assertFalse(_archive_title_is_non_broll("1997 network outage archival news report"))
