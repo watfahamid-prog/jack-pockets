@@ -42,15 +42,15 @@ The Qwen model runs on your own machine; no Qwen API key or paid API call is req
 If PowerShell says `ollama` is not recognized after installation, close and reopen PowerShell first. Then check the standard per-user install path:
 
 ```powershell
-Test-Path "$env:LOCALAPPDATA\\Programs\\Ollama\\ollama.exe"
+Test-Path "$env:LOCALAPPDATA\Programs\Ollama\ollama.exe"
 ```
 
 If it returns `True`, invoke Ollama by its full path while Windows PATH is being refreshed or repaired:
 
 ```powershell
-& "$env:LOCALAPPDATA\\Programs\\Ollama\\ollama.exe" --version
-& "$env:LOCALAPPDATA\\Programs\\Ollama\\ollama.exe" pull qwen3:4b
-& "$env:LOCALAPPDATA\\Programs\\Ollama\\ollama.exe" run qwen3:4b "Explain what makes a documentary interesting."
+& "$env:LOCALAPPDATA\Programs\Ollama\ollama.exe" --version
+& "$env:LOCALAPPDATA\Programs\Ollama\ollama.exe" pull qwen3:4b
+& "$env:LOCALAPPDATA\Programs\Ollama\ollama.exe" run qwen3:4b "Explain what makes a documentary interesting."
 ```
 
 If the test returns `False`, check **Settings → Apps → Installed apps** for Ollama and install it from the official Windows download page before continuing.
