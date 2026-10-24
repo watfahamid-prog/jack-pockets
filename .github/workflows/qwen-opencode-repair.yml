@@ -1,15 +1,16 @@
 name: Qwen + OpenCode AI repair (isolated PR)
+# The default task is a repository-wide audit; code fixes remain explicit isolated tasks.
 
 on:
   push:
-    branches: [qwen-opencode-repair-now]
+    branches: [qwen-opencode-repair-now, qwen-opencode-audit-now]
   workflow_dispatch:
     inputs:
       task:
-        description: "Specific repair task for the agent"
+        description: "Audit task or one specific isolated bug fix"
         required: true
         type: string
-        default: "Fix F-23 (unbounded music downloads) and F-8 (captions may never appear). Inspect the actual code first, make the smallest safe fixes, add regression tests, and do not change unrelated files."
+        default: "FULL REPOSITORY AUDIT ONLY: inspect every tracked source file, workflow, dependency manifest, test, AI/model/API integration, and recent failed workflow run. Trace the complete documentary path from research through script, narration, footage, editing, rendering, final MP4 and QC. Write a prioritized evidence-based report to docs/repository-audit.md with severity, exact file/line evidence, root cause, reproduction/test evidence, proposed fix, dependencies, and confidence. Do not modify production code or workflows during this audit. Mark video-output issues as unverified unless actual MP4/artifacts were inspected."
 
 permissions:
   contents: write
@@ -113,11 +114,13 @@ jobs:
             "" \
             "Requirements:" \
             "- Inspect existing implementation and tests before editing; do not guess filenames or behavior." \
-            "- Make the smallest correct change addressing the requested task, and add focused regression tests." \
-            "- Do not modify unrelated files, secrets, workflow configuration, dependencies, or lockfiles unless the task demonstrably requires it." \
+            "- First classify the task as audit-only or bug-fix. For audit-only: inspect the entire repository and write docs/repository-audit.md; do not change production code, dependencies, workflows, or lockfiles, and do not invent fixes. Existing tests run afterward as baseline validation." \
+            "- For bug-fix tasks: make the smallest safe fix and add focused regression tests. Do not modify unrelated files, secrets, workflows, dependencies, or lockfiles unless demonstrably required." \
+            "- Inspect recent failed Actions logs and open/unfinished PRs when accessible; cite exact evidence, and mark unavailable evidence explicitly." \
+            "- Trace research, planning, narration, alignment, asset search/download, visual selection, music/SFX, Remotion rendering, final QC, and artifact upload. Identify what is and is not actually verified." \
             "- Do not call paid APIs or use external inference services. Use the local Ollama model only." \
-            "- Do not claim tests passed unless you run them." \
-            "- Write a concise summary of changed files, root cause, and commands run to: $SUMMARY_PATH" \
+            "- Do not claim tests passed unless you run them or the workflow runs them after the agent." \
+            "- Write a concise summary of changed files, root cause/findings, and commands run to: $SUMMARY_PATH" \
             "- If the task is unsafe or cannot be completed, explain why and do not fabricate a fix." \
             > "$RUNNER_TEMP/agent-task.txt"
           timeout 35m opencode --standalone --print-logs --log-level DEBUG run --model ollama/qwen3:4b "$(cat "$RUNNER_TEMP/agent-task.txt")" 2>&1 | tee "$RUNNER_TEMP/opencode-repair.log"
