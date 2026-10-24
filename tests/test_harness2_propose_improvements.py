@@ -16,6 +16,20 @@ class Harness2ImprovementProposalTests(unittest.TestCase):
         self.assertEqual(result["proposals"][0]["status"], "proposed_not_adopted")
         self.assertIn("No production code", result["proposals"][0]["safety"])
 
+    def test_repeated_real_motion_gate_failure_creates_quality_gate_proposal(self):
+        observation = "motion gate: shot has no visual asset: beat-8-shot-8"
+        result = build_proposals({"runs": [
+            {"observations": [observation]},
+            {"observations": [observation]},
+        ]})
+        quality = next(
+            (item for item in result["proposals"] if item["id"] == "quality-gate"),
+            None,
+        )
+        self.assertIsNotNone(quality)
+        self.assertEqual(quality["evidence_count"], 2)
+        self.assertEqual(quality["status"], "proposed_not_adopted")
+
     def test_single_observation_does_not_create_proposal(self):
         result = build_proposals({"runs": [{"observations": ["provider search failed"]}]})
         self.assertEqual(result["proposals"], [])
