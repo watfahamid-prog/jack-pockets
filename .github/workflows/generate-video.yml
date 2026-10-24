@@ -18,7 +18,7 @@ concurrency:
 jobs:
   generate:
     env:
-      DOCUMENTARY_TOPIC: ${{ inputs.topic }}
+      DOCUMENTARY_TOPIC: ${{ inputs.topic || 'The 1997 AS 7007 Internet Routing Incident: How One Router Disrupted Internet Traffic' }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
