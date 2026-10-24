@@ -12,7 +12,7 @@ class QwenProviderTests(unittest.TestCase):
             "beats": [
                 {
                     "title": f"Beat {i}",
-                    "narration": ("Specific factual narration about the test topic and its evidence. " * 20),
+                    "narration": (" ".join(f"Beat {i} sentence {j} explains specific historical evidence for this topic in context." for j in range(1, 21))),
                     "keywords": ["test topic", f"evidence {i}"],
                     "source_urls": ["https://example.com/source"],
                     "intensity": 0.5,
@@ -46,7 +46,7 @@ class QwenProviderTests(unittest.TestCase):
             "beats": [
                 {
                     "title": f"Beat {i}",
-                    "narration": ("Unique narration about a local Qwen test and source evidence. " * 20),
+                    "narration": (" ".join(f"Beat {i} sentence {j} explains local Qwen testing and specific source evidence in context." for j in range(1, 21))),
                     "keywords": ["local Qwen", f"source {i}"],
                     "source_urls": ["https://example.com/source"],
                 }
