@@ -7,7 +7,8 @@
     "generate": "python generate.py",
     "render": "remotion render index.tsx JackPocketsVideo out/jack-pockets-documentary.mp4",
     "preview": "remotion studio index.tsx",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:captions": "node --test tests/caption-utils.test.mjs"
   },
   "dependencies": {
     "@remotion/cli": "4.0.538",
