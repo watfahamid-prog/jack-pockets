@@ -3,6 +3,7 @@ name: Footage Matching Tests
 on:
   workflow_dispatch:
   pull_request:
+    branches: [main]
     paths:
       - "editorial_brain.py"
       - "quality.py"
