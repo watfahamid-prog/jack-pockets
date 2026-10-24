@@ -67,7 +67,7 @@ jobs:
           QWEN_TIMEOUT_SECONDS: "600"
         run: |
           set -o pipefail
-          python qwen_smoke_test.py --topic "${{ inputs.topic }}" --output out/qwen-smoke-test-plan.json 2>&1 | tee "$RUNNER_TEMP/qwen-smoke-test.log"
+          python qwen_smoke_test.py --topic "${{ inputs.topic || 'What Is the Most Expensive Thing Ever?' }}" --output out/qwen-smoke-test-plan.json 2>&1 | tee "$RUNNER_TEMP/qwen-smoke-test.log"
 
       - name: Install OpenCode CLI
         run: npm install --global opencode-ai
