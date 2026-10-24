@@ -18,6 +18,8 @@ concurrency:
 
 jobs:
   generate:
+    env:
+      DOCUMENTARY_TOPIC: ${{ inputs.topic }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
