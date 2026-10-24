@@ -13,3 +13,7 @@ data/assets/
 *.png
 *.jpg
 *.jpeg
+
+# Qwen Code project-local settings and credentials
+.qwen/
+gha-creds-*.json
