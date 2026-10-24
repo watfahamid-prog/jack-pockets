@@ -53,9 +53,11 @@ jobs:
           uv venv --python 3.12 .venv
           uv pip install --python .venv/bin/python -e '.[render]'
 
-      - name: Render Jack Pockets into Harness² native c1-c8 surface
+      - name: Test evidence-memory overlay and render native c1-c8 surface
         run: |
-          python harness2/render_native_harness.py --output harness2/native
+          printf '# Test evidence memory\\n\\nOverlay passed from CI.\\n' > "$RUNNER_TEMP/harness2-memory.md"
+          python harness2/render_native_harness.py --output harness2/native --memory "$RUNNER_TEMP/harness2-memory.md"
+          grep -q "Overlay passed from CI" harness2/native/LongTermMEMORY.md
 
       - name: Validate native c1-c8 surface with pinned Harness²
         working-directory: harness2-upstream
@@ -84,5 +86,6 @@ jobs:
           name: harness2-free-demo-${{ github.run_number }}
           path: |
             harness2-upstream/runs/jack-pockets-isolated-demo/**
+            harness2/native/**
           if-no-files-found: warn
           retention-days: 14
