@@ -3,6 +3,8 @@ import html, os, re, requests
 from pathlib import Path
 from urllib.parse import quote, urlparse
 from dotenv import load_dotenv
+from relevance import _asset_relevance
+
 load_dotenv()
 
 _PEXELS_DISABLED = False
@@ -24,16 +26,43 @@ def _get(url:str,key:str,params:dict)->dict:
         raise RuntimeError(f"Pexels HTTP {r.status_code}: {r.text[:240].replace(chr(10), ' ')}")
     return r.json()
 
-def _download(url,path):
-    # Wikimedia and Internet Archive can reject anonymous/default Python requests.
-    headers = {"User-Agent": "JackPocketsDocumentary/1.0 (open-media downloader; https://github.com/watfahamid-prog/jack-pockets)"}
-    with requests.get(url,headers=headers,timeout=90,stream=True) as r:
-        r.raise_for_status()
-        with path.open("wb") as f:
-            for chunk in r.iter_content(chunk_size=1024*1024):
-                if chunk:f.write(chunk)
+MAX_ASSET_DOWNLOAD_BYTES = 125_000_000
 
-def search_pexels_videos(query:str,out:Path,limit:int=4)->list[dict]:
+
+def _download(url, path, max_bytes: int = MAX_ASSET_DOWNLOAD_BYTES):
+    """Download a bounded media file and remove partial files on all failures."""
+    headers = {
+        "User-Agent": "JackPocketsDocumentary/1.0 (open-media downloader; https://github.com/watfahamid-prog/jack-pockets)"
+    }
+    try:
+        with requests.get(url, headers=headers, timeout=(15, 25), stream=True) as response:
+            response.raise_for_status()
+            content_length = response.headers.get("content-length")
+            if content_length:
+                try:
+                    if int(content_length) > max_bytes:
+                        raise ValueError(
+                            f"media file exceeds size limit ({content_length} > {max_bytes} bytes)"
+                        )
+                except ValueError as exc:
+                    if "exceeds size limit" in str(exc):
+                        raise
+            written = 0
+            with path.open("wb") as handle:
+                for chunk in response.iter_content(chunk_size=1024 * 1024):
+                    if not chunk:
+                        continue
+                    written += len(chunk)
+                    if written > max_bytes:
+                        raise ValueError(
+                            f"media download exceeded size limit ({written} > {max_bytes} bytes)"
+                        )
+                    handle.write(chunk)
+    except Exception:
+        path.unlink(missing_ok=True)
+        raise
+
+def search_pexels_videos(query:str,out:Path,limit:int=4,beat:dict|None=None)->list[dict]:
     if _PEXELS_DISABLED:
         print("[pexels] skipping after earlier authentication/authorization failure", flush=True)
         return []
@@ -49,10 +78,28 @@ def search_pexels_videos(query:str,out:Path,limit:int=4)->list[dict]:
     result=[]
     for video in videos:
         files=[f for f in video.get("video_files",[]) if f.get("file_type")=="video/mp4" and f.get("link")]
-        files.sort(key=lambda f:(f.get("width",0)>=1280,f.get("width",0)*f.get("height",0),f.get("fps",0)),reverse=True)
+        # Prefer 720p/1080p; never choose 4K just because it has the most pixels.
+        capped = [f for f in files if int(f.get("width") or 0) <= 1920]
+        files = capped or files
+        files.sort(key=lambda f:(
+            abs(int(f.get("width") or 1280) - 1280),
+            abs(int(f.get("height") or 720) - 720),
+            -float(f.get("fps") or 0),
+        ))
         chosen=files[0] if files else None
         if not chosen: continue
         vid=str(video.get("id"))
+        video_url = str(video.get("url") or "")
+        candidate_title = video_url.rstrip("/").rsplit("/",1)[-1].replace("-"," ")
+        candidate = {"title": candidate_title, "description": video_url, "tags": []}
+        if beat is not None:
+            relevant, matched_terms = _asset_relevance(query, beat, candidate)
+            if not relevant:
+                print(
+                    f"[pexels] rejected before download title={candidate_title[:100]!r} matched={matched_terms}",
+                    flush=True,
+                )
+                continue
         path=out/f"video-{vid}.mp4"
         try:
             if not path.exists(): _download(chosen["link"],path)
