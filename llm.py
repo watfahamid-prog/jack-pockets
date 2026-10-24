@@ -279,6 +279,7 @@ def _qwen(topic: str, research: list[dict] | None = None) -> dict:
             {"role": "user", "content": _research_prompt(topic, research)},
         ],
         temperature=0.4,
+        max_tokens=int(os.getenv("QWEN_MAX_TOKENS", "9000")),
     )
     content = response.choices[0].message.content
     plan = _normalize_plan(_parse_json(content), topic)
