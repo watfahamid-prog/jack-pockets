@@ -14,6 +14,8 @@ class WorkflowSafetyTests(unittest.TestCase):
         self.assertIn('python generate.py --topic "$DOCUMENTARY_TOPIC" --assets-per-beat 2 2>&1 | tee "$RUNNER_TEMP/jack-pockets-generate.log"', workflow)
         self.assertIn("set -o pipefail", workflow)
         self.assertIn("Record Harness² run feedback", workflow)
+        self.assertIn('JACKPOCKETS_VIDEO_QC: "1"', workflow)
+        self.assertIn("public/runs/**/video-qc.json", workflow)
         self.assertNotIn('run: python generate.py --topic "${{ inputs.topic }}"', workflow)
 
 
