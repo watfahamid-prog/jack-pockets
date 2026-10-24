@@ -1,0 +1,112 @@
+name: Verify Qwen and OpenCode (experimental)
+
+on:
+  push:
+    branches: [verify-qwen-opencode]
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: "Topic for the Qwen documentary-plan smoke test"
+        required: true
+        type: string
+        default: "What Is the Most Expensive Thing Ever?"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qwen-opencode-verification
+  cancel-in-progress: false
+
+jobs:
+  verify-local-ai:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install minimal Qwen smoke-test dependencies
+        run: python -m pip install -r requirements-qwen.txt
+
+      - name: Install Ollama and start local service
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://ollama.com/install.sh -o "$RUNNER_TEMP/ollama-install.sh"
+          sh "$RUNNER_TEMP/ollama-install.sh"
+          (ollama serve > "$RUNNER_TEMP/ollama.log" 2>&1 & echo $! > "$RUNNER_TEMP/ollama.pid")
+          for attempt in $(seq 1 60); do
+            if curl --silent --fail http://127.0.0.1:11434/api/tags >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          curl --silent --fail http://127.0.0.1:11434/api/tags
+          ollama --version
+
+      - name: Download Qwen model
+        run: ollama pull qwen3:4b
+
+      - name: Run real Qwen documentary-plan smoke test
+        env:
+          LLM_PROVIDER: qwen
+          QWEN_BASE_URL: http://127.0.0.1:11434/v1
+          QWEN_MODEL: qwen3:4b
+          QWEN_API_KEY: ollama
+          QWEN_TIMEOUT_SECONDS: "600"
+        run: |
+          set -o pipefail
+          python qwen_smoke_test.py --topic "${{ inputs.topic || 'What Is the Most Expensive Thing Ever?' }}" --output out/qwen-smoke-test-plan.json 2>&1 | tee "$RUNNER_TEMP/qwen-smoke-test.log"
+
+      - name: Install OpenCode CLI
+        run: npm install --global opencode-ai
+
+      - name: Verify OpenCode can use local Qwen and make a test change
+        shell: bash
+        env:
+          OLLAMA_HOST: http://127.0.0.1:11434
+        run: |
+          set -euo pipefail
+          SANDBOX="$RUNNER_TEMP/opencode-sandbox"
+          mkdir -p "$SANDBOX"
+          cd "$SANDBOX"
+          opencode --version | tee "$RUNNER_TEMP/opencode-version.log"
+          set +e
+          timeout 15m opencode run --model ollama/qwen3:4b "In this empty test workspace, create exactly one file named verification.py. It must define a function add(a, b) returning a+b and include a small main guard that prints add(2, 3). Do not modify files outside this workspace. Then stop." 2>&1 | tee "$RUNNER_TEMP/opencode-run.log"
+          OPENCODE_STATUS=${PIPESTATUS[0]}
+          set -e
+          if [ "$OPENCODE_STATUS" -ne 0 ]; then
+            echo "OpenCode exited with status $OPENCODE_STATUS" >&2
+            exit "$OPENCODE_STATUS"
+          fi
+          test -f verification.py
+          python verification.py | tee "$RUNNER_TEMP/opencode-test.log"
+          grep -qx "5" "$RUNNER_TEMP/opencode-test.log"
+          python -m py_compile verification.py
+          echo "OpenCode successfully created and executed a test change with local Qwen."
+
+      - name: Upload verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qwen-opencode-verification-${{ github.run_number }}
+          path: |
+            out/qwen-smoke-test-plan.json
+            ${{ runner.temp }}/qwen-smoke-test.log
+            ${{ runner.temp }}/ollama.log
+            ${{ runner.temp }}/opencode-version.log
+            ${{ runner.temp }}/opencode-run.log
+            ${{ runner.temp }}/opencode-test.log
+          if-no-files-found: warn
+          retention-days: 14
