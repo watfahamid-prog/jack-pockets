@@ -109,6 +109,7 @@ jobs:
           QWEN_API_KEY: ollama
           QWEN_TIMEOUT_SECONDS: "1800"
           QWEN_MAX_TOKENS: "9000"
+          JACKPOCKETS_DISABLE_CACHE: "1"
           TTS_PROVIDER: edge
           TTS_VOICE: en-US-GuyNeural
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
