@@ -1,6 +1,7 @@
 import React from "react";
 import { AbsoluteFill, Audio, Img, OffthreadVideo, Sequence, interpolate, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import type { VideoManifest, Beat, Shot, Layer } from "./types";
+import { captionAt } from "./caption-utils.js";
 
 const src = (value: string) => value.startsWith("http") ? value : staticFile(value);
 const textShadow = "0 3px 18px rgba(0,0,0,.95)";
@@ -60,23 +61,6 @@ const ShotView: React.FC<{ beat: Beat; shot: Shot; frame: number; fps: number }>
     <AbsoluteFill style={{ pointerEvents: "none", boxShadow: "inset 0 0 70px rgba(0,0,0,.12)", zIndex: 32 }} />
     <AbsoluteFill style={{ pointerEvents: "none", background: "linear-gradient(180deg,rgba(0,0,0,.2),transparent 22%,transparent 78%,rgba(0,0,0,.28))", zIndex: 33 }} />
   </AbsoluteFill>;
-};
-
-const captionAt = (words: Array<{ word: string; start: number; end: number }>, time: number) => {
-  const index = words.findIndex(word => time >= word.start && time < word.end);
-  if (index < 0) return "";
-  const endsSentence = (word: string) => /[.!?]["')\]]?$/.test(word.trim());
-  let start = index;
-  while (start > 0 && index - start < 6 && !endsSentence(words[start - 1].word)) start--;
-  let end = Math.min(words.length, start + 7);
-  for (let i = start; i < end; i++) {
-    if (i >= index && endsSentence(words[i].word)) { end = i + 1; break; }
-  }
-  if (index >= end) {
-    start = Math.max(0, index - 3);
-    end = Math.min(words.length, start + 7);
-  }
-  return words.slice(start, end).map(item => item.word.trim()).filter(Boolean).join(" ");
 };
 
 export const JackPocketsVideo: React.FC<{ manifest: VideoManifest }> = ({ manifest }) => {
