@@ -38,11 +38,19 @@ def _asset_relevance(query: str, beat: dict, asset: dict) -> tuple[bool, list[st
         if token not in stopwords and not token.isdigit()
     }
     query_hits = sorted(query_terms & metadata_terms)
-    # Longer multi-concept queries need stronger evidence. One generic word in
-    # a five-word search must not qualify an unrelated lecture, tutorial, or
-    # stock clip. Short queries can still match one precise subject term.
-    required_query_hits = min(3, max(1, (len(query_terms) + 1) // 2))
-    if len(query_terms) >= 3 and len(query_hits) < required_query_hits:
+    # Most stock clips are titled around one concrete subject, not every
+    # modifier in the search phrase. Accept two query-term hits, or one
+    # sufficiently specific subject term; never let a match from a different
+    # beat keyword substitute for a match to the active query.
+    broad_terms = {
+        "historical", "history", "archive", "archives", "manuscript",
+        "manuscripts", "documentary", "footage", "visualization", "cinematic",
+        "modern", "ancient", "scene", "video", "screen", "monitor", "computer",
+        "network", "server", "cable", "office", "room", "person", "people",
+        "system", "data", "world", "lights", "map", "terminal",
+    }
+    strong_hits = [term for term in query_hits if len(term) >= 5 and term not in broad_terms]
+    if len(query_terms) >= 3 and len(query_hits) < 2 and not strong_hits:
         return False, query_hits
     # Require the match to be relevant to the beat as well as to the exact query.
     found = sorted(target & metadata_terms)

@@ -106,8 +106,8 @@ class AssetRelevanceTests(unittest.TestCase):
             ],
         }
         asset = {
-            "title": "GeekBeat TV WiPNET CES 2012",
-            "description": "A product demo about Ethernet over coax cable and a wireless access point.",
+            "title": "Terminal screen clearing memory cache",
+            "description": "A network engineer typing frantically.",
             "tags": [],
         }
         relevant, matched = _asset_relevance(
@@ -116,7 +116,7 @@ class AssetRelevanceTests(unittest.TestCase):
         self.assertFalse(relevant)
         self.assertLess(len(matched), 3)
 
-    def test_requires_multiple_hits_for_long_queries_even_when_one_term_is_specific(self):
+    def test_accepts_multiple_active_query_hits_for_a_long_query(self):
         beat = {
             "title": "The Persistent Phantom",
             "keywords": ["ethernet cable disconnected server back"],
@@ -129,7 +129,7 @@ class AssetRelevanceTests(unittest.TestCase):
         relevant, matched = _asset_relevance(
             "ethernet cable disconnected server back", beat, asset
         )
-        self.assertFalse(relevant)
+        self.assertTrue(relevant)
         self.assertEqual(matched, ["cable", "ethernet"])
 
     def test_accepts_two_term_short_subject_query(self):
@@ -138,6 +138,42 @@ class AssetRelevanceTests(unittest.TestCase):
         relevant, matched = _asset_relevance("router network", beat, asset)
         self.assertTrue(relevant)
         self.assertEqual(matched, ["network", "router"])
+
+    def test_accepts_specific_subject_match_when_stock_title_omits_modifiers(self):
+        beat = {
+            "title": "The Black Hole Effect",
+            "keywords": ["oscilloscope data signal drop flatline"],
+        }
+        asset = {
+            "title": "Close up of oscilloscope with waveform display",
+            "description": "An oscilloscope in operation.",
+            "tags": [],
+        }
+        relevant, matched = _asset_relevance(
+            "oscilloscope data signal drop flatline", beat, asset
+        )
+        self.assertTrue(relevant)
+        self.assertIn("oscilloscope", matched)
+
+    def test_rejects_asset_that_matches_other_beat_keywords_but_not_active_query(self):
+        beat = {
+            "title": "The Persistent Phantom",
+            "keywords": [
+                "ethernet cable disconnected server back",
+                "terminal screen clearing memory cache",
+                "network engineer typing frantically 1990s",
+            ],
+        }
+        asset = {
+            "title": "A river bank in autumn",
+            "description": "Beautiful autumn scenery.",
+            "tags": [],
+        }
+        relevant, matched = _asset_relevance(
+            "ethernet cable disconnected server back", beat, asset
+        )
+        self.assertFalse(relevant)
+        self.assertEqual(matched, [])
 
     def test_rejects_substring_only_match(self):
         beat = {"title": "car", "keywords": ["car"]}

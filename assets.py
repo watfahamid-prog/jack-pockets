@@ -29,6 +29,20 @@ def _get(url:str,key:str,params:dict)->dict:
 MAX_ASSET_DOWNLOAD_BYTES = 125_000_000
 
 
+def _archive_title_is_non_broll(title: str) -> bool:
+    """Reject archive results that are clearly tutorials, shows, or demos."""
+    patterns = (
+        r"\btutorial\b", r"\bhow\s+to\b", r"\bfailsafe\b", r"\breflash\b",
+        r"\bwalkthrough\b", r"\bpodcast\b", r"\bepisode\b", r"\bCES\s+20\d{2}\b",
+        r"\bdemo\b", r"\breview\b", r"\bcourse\b", r"\bclass\s+materials\b",
+        r"\btraining\b", r"\blecture\b", r"\bwebinar\b", r"\bsetup\b",
+        r"\bDIY\b", r"\bfirmware\b", r"\bconfigure\b", r"\bconfiguration\b",
+        r"\bguide\b", r"\bmake\s+(?:an?\s+)?(?:ethernet|network|router|server|cable)\b",
+        r"\bpart\s+\d+\b", r"\bTV\s+\d+\b",
+    )
+    return any(re.search(pattern, str(title), re.IGNORECASE) for pattern in patterns)
+
+
 def _download(url, path, max_bytes: int = MAX_ASSET_DOWNLOAD_BYTES):
     """Download a bounded media file and remove partial files on all failures."""
     headers = {
@@ -278,7 +292,14 @@ def search_archive_videos(query:str,out:Path,limit:int=3,beat:dict|None=None)->l
             license_url = str(doc.get("licenseurl") or "").lower()
             if not identifier or identifier in seen:
                 continue
-            metadata_text = (str(doc.get("title") or "") + " " +
+            title = str(doc.get("title") or "")
+            if _archive_title_is_non_broll(title):
+                print(
+                    f"[archive] rejected program/tutorial result title={title[:100]!r}",
+                    flush=True,
+                )
+                continue
+            metadata_text = (title + " " +
                              str(doc.get("description") or "")[:1800]).lower()
             matched_terms = {term for term in query_terms if term in metadata_text}
             if len(query_terms) >= 3 and len(matched_terms) < 2:
