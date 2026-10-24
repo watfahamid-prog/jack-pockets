@@ -7,13 +7,17 @@ on:
         description: "Original documentary topic"
         required: true
         type: string
-        default: "The 1997 AS 7007 Internet Routing Incident: How One Router Disrupted Internet Traffic"
+        default: "What Is the Most Expensive Thing Ever?"
+  # Temporary audit-only trigger; remove before proposing the production fix.
+  push:
+    branches:
+      - audit/full-documentary-render
 
 permissions:
   contents: read
 
 concurrency:
-  group: jack-pockets-documentary
+  group: jack-pockets-documentary-audit-v2
   cancel-in-progress: false
 
 jobs:
@@ -49,9 +53,15 @@ jobs:
         run: |
           if command -v ffmpeg >/dev/null 2>&1; then
             ffmpeg -version
+          elif timeout 90 sudo apt-get update && timeout 90 sudo apt-get install -y ffmpeg; then
+            ffmpeg -version
           else
-            sudo apt-get update
-            sudo apt-get install -y ffmpeg
+            python -m pip install imageio-ffmpeg
+            mkdir -p "$RUNNER_TEMP/ffmpeg-bin"
+            FFMPEG_PATH="$(python -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())')"
+            ln -sf "$FFMPEG_PATH" "$RUNNER_TEMP/ffmpeg-bin/ffmpeg"
+            echo "$RUNNER_TEMP/ffmpeg-bin" >> "$GITHUB_PATH"
+            "$RUNNER_TEMP/ffmpeg-bin/ffmpeg" -version
           fi
 
       - name: Install Node dependencies
@@ -90,7 +100,7 @@ jobs:
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
           MUSIC_URL: ${{ secrets.MUSIC_URL }}
           DOCUMENTARY_TOPIC: ${{ inputs.topic }}
-        run: python generate.py --topic "$DOCUMENTARY_TOPIC" --assets-per-beat 2
+        run: python generate.py --topic "${DOCUMENTARY_TOPIC:-What Is the Most Expensive Thing Ever?}" --assets-per-beat 2
 
       # Save useful research/plan/audio cache entries even when the quality gate
       # rejects a run. Otherwise failed generation attempts never persist cache data.
