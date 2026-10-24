@@ -7,17 +7,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-def slug(value: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")[:55] or "run"
-
-
 def summarize(log_text: str, manifest_path: Path | None) -> dict:
     errors: list[str] = []
-    gate = re.search(r"QUALITY GATE FAILED:\\s*([\\s\\S]*?)(?=\\n(?:Traceback|Error:)|\\Z)", log_text)
-    if gate:
-        errors.extend(line.strip() for line in gate.group(1).splitlines() if line.strip())
-    final_qc_failed = re.findall(r"(?:FINAL QC FAILED|FINAL QC FAILED:)[^\\n]*", log_text)
-    errors.extend(x.strip() for x in final_qc_failed)
+    if "QUALITY GATE FAILED:" in log_text:
+        tail = log_text.split("QUALITY GATE FAILED:", 1)[1]
+        for line in tail.splitlines():
+            line = line.strip()
+            if not line or line.startswith(("Traceback", "Error:")):
+                break
+            errors.append(line)
+    errors.extend(line.strip() for line in log_text.splitlines() if "FINAL QC FAILED" in line)
     if not errors:
         errors.extend(
             line.strip() for line in log_text.splitlines()
@@ -47,7 +46,7 @@ def summarize(log_text: str, manifest_path: Path | None) -> dict:
             )
         except (OSError, json.JSONDecodeError):
             errors.append("manifest exists but could not be parsed")
-    rendered = bool(re.search(r"FINAL QC PASSED:", log_text))
+    rendered = "FINAL QC PASSED:" in log_text
     quality_failed = "QUALITY GATE FAILED" in log_text or "FINAL QC FAILED" in log_text
     return {
         "status": "passed" if rendered and not quality_failed else "failed" if quality_failed else "incomplete",
@@ -83,10 +82,7 @@ def render_memory(ledger: dict) -> str:
     for run in ledger.get("runs", []):
         for observation in run.get("observations", []):
             counts[observation] = counts.get(observation, 0) + 1
-    recurring = sorted(
-        ((count, text) for text, count in counts.items() if count >= 2),
-        reverse=True,
-    )[:10]
+    recurring = sorted(((count, text) for text, count in counts.items() if count >= 2), reverse=True)[:10]
     lines = [
         "# Harness² run evidence memory",
         "",
@@ -120,8 +116,7 @@ def main() -> None:
     args = parser.parse_args()
 
     log_text = args.log.read_text(encoding="utf-8", errors="replace") if args.log.exists() else ""
-    manifest = args.run_dir / "manifest.json"
-    result = summarize(log_text, manifest)
+    result = summarize(log_text, args.run_dir / "manifest.json")
     event = {
         "run_id": args.run_id,
         "run_number": args.run_number,
