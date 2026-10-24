@@ -11,7 +11,9 @@ class WorkflowSafetyTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("DOCUMENTARY_TOPIC: ${{ inputs.topic }}", workflow)
-        self.assertIn('run: python generate.py --topic "$DOCUMENTARY_TOPIC" --assets-per-beat 2', workflow)
+        self.assertIn('python generate.py --topic "$DOCUMENTARY_TOPIC" --assets-per-beat 2 2>&1 | tee "$RUNNER_TEMP/jack-pockets-generate.log"', workflow)
+        self.assertIn("set -o pipefail", workflow)
+        self.assertIn("Record Harness² run feedback", workflow)
         self.assertNotIn('run: python generate.py --topic "${{ inputs.topic }}"', workflow)
 
 

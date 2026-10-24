@@ -97,7 +97,25 @@ jobs:
           PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
           MUSIC_URL: ${{ secrets.MUSIC_URL }}
-        run: python generate.py --topic "$DOCUMENTARY_TOPIC" --assets-per-beat 2
+        run: |
+          set -o pipefail
+          python generate.py --topic "$DOCUMENTARY_TOPIC" --assets-per-beat 2 2>&1 | tee "$RUNNER_TEMP/jack-pockets-generate.log"
+
+      # Record objective run evidence into the reusable cache. This is the first
+      # live feedback connection for Harness²; it never changes production settings.
+      - name: Record Harness² run feedback
+        if: always()
+        run: |
+          RUN_DIR="public/runs/$(python -c 'import re,sys; print(re.sub(r"[^a-z0-9]+", "-", sys.argv[1].lower()).strip("-")[:55] or "run")' "$DOCUMENTARY_TOPIC")"
+          python harness2/record_run.py \
+            --topic "$DOCUMENTARY_TOPIC" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-number "$GITHUB_RUN_NUMBER" \
+            --log "$RUNNER_TEMP/jack-pockets-generate.log" \
+            --run-dir "$RUN_DIR" \
+            --ledger "$HOME/.cache/jack-pockets/harness2/experience-ledger.json" \
+            --report harness2-learning-report.json \
+            --memory harness2-learning-memory.md
 
       # Save useful research/plan/audio cache entries even when the quality gate
       # rejects a run. Otherwise failed generation attempts never persist cache data.
@@ -122,5 +140,7 @@ jobs:
             public/runs/**/alignment.json
             public/runs/**/narration.mp3
             public/runs/**/music-bed.json
+            harness2-learning-report.json
+            harness2-learning-memory.md
           if-no-files-found: warn
           retention-days: 14
