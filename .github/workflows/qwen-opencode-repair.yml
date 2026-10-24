@@ -2,7 +2,7 @@ name: Qwen + OpenCode AI repair (isolated PR)
 
 on:
   push:
-    branches: [qwen-opencode-repair-now]
+    branches: [qwen-opencode-repair-now, main]
   workflow_dispatch:
     inputs:
       task:
@@ -96,6 +96,10 @@ jobs:
             > "$RUNNER_TEMP/agent-task.txt"
           timeout 35m opencode run --model ollama/qwen3:4b "$(cat "$RUNNER_TEMP/agent-task.txt")" 2>&1 | tee "$RUNNER_TEMP/opencode-repair.log"
           git diff --check
+          if git status --porcelain | grep -E "^[ MARCUD?!]{2} \.github/workflows/|^[ MARCUD?!]{2} requirements[^/]*$"; then
+            echo "Agent changed a workflow or dependency manifest; refusing to publish it automatically." >&2
+            exit 1
+          fi
           git add -N .
           git status --short
           git diff --stat | tee "$RUNNER_TEMP/repair-diff-stat.txt"
