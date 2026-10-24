@@ -2,7 +2,7 @@ name: Qwen + OpenCode AI repair (isolated PR)
 
 on:
   push:
-    branches: [qwen-opencode-repair-now]
+    branches: [qwen-opencode-repair-now, fix/opencode-cli-invocation]
   workflow_dispatch:
     inputs:
       task:
