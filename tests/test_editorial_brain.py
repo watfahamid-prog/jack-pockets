@@ -212,5 +212,46 @@ class FootageMatchingTests(unittest.TestCase):
         self.assertGreater(result["shots"][1]["start"], 0)
 
 
+    def test_least_reused_relevant_clip_is_preferred(self):
+        beat = {
+            "id": "beat-diversity", "start": 0, "end": 12,
+            "title": "Internet router network",
+            "keywords": ["internet router network"],
+            "narration": (
+                "Internet router network traffic changed. "
+                "Internet router network routes changed again. "
+                "Internet router network traffic returned."
+            ),
+            "assets": [
+                {"id": "router-a", "kind": "video", "title": "Internet router network traffic", "description": "", "tags": []},
+                {"id": "router-b", "kind": "video", "title": "Internet router network routes", "description": "", "tags": []},
+                {"id": "router-c", "kind": "video", "title": "Internet router network traffic routes", "description": "", "tags": []},
+            ],
+        }
+        shots = build_shots(beat)["shots"]
+        chosen = [shot["assetIds"][0] if shot["assetIds"] else "" for shot in shots]
+        self.assertEqual(len(chosen), 3)
+        self.assertEqual(len(set(chosen)), 3)
+
+    def test_long_beat_does_not_create_tiny_flash_shots(self):
+        sentences_text = [f"Router network sentence{i}." for i in range(8)]
+        beat = {
+            "id": "beat-min-shot", "start": 0, "end": 40,
+            "narration": " ".join(sentences_text),
+            "assets": [],
+        }
+        words = []
+        for i, sentence in enumerate(sentences_text):
+            start = i * 4.0
+            words.extend([
+                {"word": "Router", "start": start, "end": start + 0.3},
+                {"word": "network", "start": start + 0.3, "end": start + 0.6},
+                {"word": f"sentence{i}", "start": start + 0.6, "end": start + 1.0},
+            ])
+        shots = build_shots(beat, aligned_words=words, sentences_override=sentences_text)["shots"]
+        for shot in shots:
+            self.assertGreaterEqual(shot["end"] - shot["start"], 0.25)
+
+
 if __name__ == "__main__":
     unittest.main()
