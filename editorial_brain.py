@@ -254,7 +254,13 @@ def build_shots(beat, seed=42, aligned_words=None, sentences_override=None):
                         used_counts.get(str(asset["id"]), 0),
                         str(asset["id"]) not in sentence_ids,
                         -(
-                            _asset_score(asset, terms, role, used_counts.get(str(asset["id"]), 0), "")
+                            _asset_score(
+                                asset,
+                                terms if str(asset["id"]) in sentence_ids else beat_terms,
+                                role,
+                                used_counts.get(str(asset["id"]), 0),
+                                "",
+                            )
                             + semantic_scores.get(str(asset["id"]), 0.0) * 10.0
                         ),
                         str(asset.get("kind", "")).lower() != "video",
