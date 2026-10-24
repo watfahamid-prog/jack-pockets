@@ -13,7 +13,9 @@ def summarize(log_text: str, manifest_path: Path | None) -> dict:
         tail = log_text.split("QUALITY GATE FAILED:", 1)[1]
         for line in tail.splitlines():
             line = line.strip()
-            if not line or line.startswith(("Traceback", "Error:")):
+            if not line:
+                continue
+            if line.startswith(("Traceback", "Error:")):
                 break
             errors.append(line)
     errors.extend(line.strip() for line in log_text.splitlines() if "FINAL QC FAILED" in line)
