@@ -36,7 +36,9 @@ jobs:
         uses: astral-sh/setup-uv@v6
 
       - name: Validate Jack Pockets Harness² manifest
-        run: python harness2/validate_harness.py
+        run: |
+          python harness2/validate_harness.py
+          python -m unittest discover -s tests -p 'test_harness2_record_run.py' -v
 
       - name: Fetch pinned Harness² into an isolated directory
         run: |
