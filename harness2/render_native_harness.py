@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 
 MANIFEST = Path(__file__).with_name("jack_pockets_harness.json")
 
 
 def _slug(value: str) -> str:
-    return "-".join(value.lower().replace("_", "-").split())
+    value = re.sub(r"[^a-z0-9_-]+", "-", value.lower())
+    return value.strip("-_") or "component"
 
 
 def render(manifest_path: Path, output_dir: Path) -> None:
@@ -38,17 +40,19 @@ def render(manifest_path: Path, output_dir: Path) -> None:
 
     skills_dir = output_dir / "skills"
     for name in components["skills"]:
-        skill = skills_dir / _slug(name)
+        skill_name = _slug(name)
+        skill = skills_dir / skill_name
         skill.mkdir(parents=True, exist_ok=True)
         (skill / "SKILL.md").write_text(
-            f"---\nname: {_slug(name)}\ndescription: Jack Pockets {name} workflow.\n---\n\n"
+            f"---\nname: {skill_name}\ndescription: Jack Pockets {name} workflow.\n---\n\n"
             f"# {name}\n\nThis Harness² skill is an integration surface for the existing Jack Pockets workflow.\n",
             encoding="utf-8",
         )
 
     subagents_dir = output_dir / "sub_agents"
     for name in components["subagents"]:
-        agent = subagents_dir / _slug(name)
+        agent_name = _slug(name)
+        agent = subagents_dir / agent_name
         agent.mkdir(parents=True, exist_ok=True)
         (agent / "AGENT.md").write_text(
             f"---\nmode: subagent\ndescription: Jack Pockets {name} specialist.\n---\n\n"
