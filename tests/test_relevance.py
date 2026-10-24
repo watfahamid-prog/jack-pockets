@@ -96,6 +96,49 @@ class AssetRelevanceTests(unittest.TestCase):
         self.assertTrue(relevant)
         self.assertIn("library", matched)
 
+    def test_rejects_asset_that_matches_other_beat_keywords_but_not_search_query(self):
+        beat = {
+            "title": "The Persistent Phantom",
+            "keywords": [
+                "ethernet cable disconnected server back",
+                "terminal screen clearing memory cache",
+                "network engineer typing frantically 1990s",
+            ],
+        }
+        asset = {
+            "title": "GeekBeat TV WiPNET CES 2012",
+            "description": "A product demo about Ethernet over coax cable and a wireless access point.",
+            "tags": [],
+        }
+        relevant, matched = _asset_relevance(
+            "ethernet cable disconnected server back", beat, asset
+        )
+        self.assertFalse(relevant)
+        self.assertLess(len(matched), 3)
+
+    def test_requires_multiple_hits_for_long_queries_even_when_one_term_is_specific(self):
+        beat = {
+            "title": "The Persistent Phantom",
+            "keywords": ["ethernet cable disconnected server back"],
+        }
+        asset = {
+            "title": "Ethernet network product demo",
+            "description": "A demo of Ethernet over coax cable.",
+            "tags": [],
+        }
+        relevant, matched = _asset_relevance(
+            "ethernet cable disconnected server back", beat, asset
+        )
+        self.assertFalse(relevant)
+        self.assertEqual(matched, ["cable", "ethernet"])
+
+    def test_accepts_two_term_short_subject_query(self):
+        beat = {"title": "The Glue of the Web", "keywords": ["router network"]}
+        asset = {"title": "Router network routing equipment", "description": "", "tags": []}
+        relevant, matched = _asset_relevance("router network", beat, asset)
+        self.assertTrue(relevant)
+        self.assertEqual(matched, ["network", "router"])
+
     def test_rejects_substring_only_match(self):
         beat = {"title": "car", "keywords": ["car"]}
         asset = {"title": "Carpet installation", "description": "Carpet fitting"}

@@ -28,21 +28,25 @@ def _asset_relevance(query: str, beat: dict, asset: dict) -> tuple[bool, list[st
     metadata = " ".join(str(asset.get(key, "")) for key in (
         "title", "description", "tags",
     )).lower().replace("-", " ").replace("_", " ")
-    # Compare whole tokens. Substring matching falsely treats terms like "car"
-    # as matches for "carpet", allowing unrelated footage through the gate.
+    # Score against the *query that produced this candidate*, not every keyword
+    # in the beat. Otherwise a clip found for "ethernet cable disconnected"
+    # can pass just because its description happens to mention another beat
+    # keyword such as "terminal" or "network".
     metadata_terms = set(re.findall(r"[a-z0-9]{3,}", metadata))
-    found = sorted(target & metadata_terms)
-    # A strong match on one specific subject noun is enough to keep useful stock
-    # footage (for example, a library-catalog clip for a library-archive beat).
-    # Broad production/history words alone are not specific enough.
-    broad_terms = {
-        "historical", "history", "archive", "archives", "manuscript",
-        "manuscripts", "documentary", "footage", "visualization",
-        "cinematic", "modern", "ancient", "scene", "video",
+    query_terms = {
+        token for token in re.findall(r"[a-z0-9]{3,}", str(query).lower())
+        if token not in stopwords and not token.isdigit()
     }
-    strong_hits = [term for term in found if len(term) >= 6 and term not in broad_terms]
-    required = 2 if len(target) >= 5 else 1
-    return len(found) >= required or bool(strong_hits), found
+    query_hits = sorted(query_terms & metadata_terms)
+    # Longer multi-concept queries need stronger evidence. One generic word in
+    # a five-word search must not qualify an unrelated lecture, tutorial, or
+    # stock clip. Short queries can still match one precise subject term.
+    required_query_hits = min(3, max(1, (len(query_terms) + 1) // 2))
+    if len(query_terms) >= 3 and len(query_hits) < required_query_hits:
+        return False, query_hits
+    # Require the match to be relevant to the beat as well as to the exact query.
+    found = sorted(target & metadata_terms)
+    return bool(query_hits) and bool(found), query_hits
 
 def _relevant_sources(topic: str, beat: dict, sources: list[dict], limit: int = 3) -> list[str]:
     """Return only sources whose title/content overlaps the actual beat subject."""
