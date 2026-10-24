@@ -269,7 +269,7 @@ def _qwen(topic: str, research: list[dict] | None = None) -> dict:
     client = OpenAI(
         base_url=base_url,
         api_key=api_key,
-        timeout=float(os.getenv("QWEN_TIMEOUT_SECONDS", "300")),
+        timeout=float(os.getenv("QWEN_TIMEOUT_SECONDS", "600")),
         max_retries=0,
     )
     prompt = _research_prompt(topic, research)
