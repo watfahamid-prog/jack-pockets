@@ -7,11 +7,7 @@ on:
         description: "Original documentary topic"
         required: true
         type: string
-        default: "What Is the Most Expensive Thing Ever?"
-  # Temporary audit-only trigger; this branch is never merged into main.
-  push:
-    branches:
-      - audit/full-documentary-render
+        default: "The 1997 AS 7007 Internet Routing Incident: How One Router Disrupted Internet Traffic"
 
 permissions:
   contents: read
@@ -90,7 +86,7 @@ jobs:
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
           MUSIC_URL: ${{ secrets.MUSIC_URL }}
           DOCUMENTARY_TOPIC: ${{ inputs.topic }}
-        run: python generate.py --topic "${DOCUMENTARY_TOPIC:-What Is the Most Expensive Thing Ever?}" --assets-per-beat 2
+        run: python generate.py --topic "$DOCUMENTARY_TOPIC" --assets-per-beat 2
 
       # Save useful research/plan/audio cache entries even when the quality gate
       # rejects a run. Otherwise failed generation attempts never persist cache data.
