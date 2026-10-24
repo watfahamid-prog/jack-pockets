@@ -33,6 +33,15 @@ class AssetRelevanceTests(unittest.TestCase):
         self.assertNotEqual(queries[0], beat["title"])
         self.assertLessEqual(len(queries), 4)
 
+    def test_media_queries_normalize_repeated_whitespace(self):
+        beat = {
+            "title": "Lunar surface operations",
+            "keywords": ["lunar   outpost", "artemis    accords"],
+            "visual_intent": "",
+        }
+        queries = _asset_search_queries(beat, limit=1)
+        self.assertEqual(queries, ["lunar outpost artemis accords"])
+
     def test_media_queries_skip_generic_or_duplicate_candidates(self):
         beat = {
             "title": "The True Cost of Human Ambition",
