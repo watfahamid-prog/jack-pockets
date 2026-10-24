@@ -27,6 +27,11 @@ def slug(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")[:55] or "run"
 
 
+def _asset_query_limit(assets_per_beat: int) -> int:
+    """Allow a third targeted query when the default two do not find enough clips."""
+    return min(3, max(2, int(assets_per_beat) + 1))
+
+
 def public_path(path: Path) -> str:
     return str(path.relative_to("public")).replace("\\", "/")
 
@@ -103,9 +108,9 @@ def main() -> None:
         first_sentence = re.split(r"(?<=[.!?])\s+", narration_text)[0][:180]
         queries = _asset_search_queries(
             {**beat, "title": title, "keywords": beat_keywords, "narration": narration_text},
-            # Two high-quality subject-first queries are usually enough; the old
-            # default made three queries for every beat and multiplied provider downloads.
-            limit=min(3, max(2, args.assets_per_beat)),
+            # Start with two subject-first queries, but allow a third fallback when
+            # the first two do not yield enough distinct relevant moving clips.
+            limit=_asset_query_limit(args.assets_per_beat),
         )
         print(
             f"[assets] beat={index + 1}/{len(plan.get('beats', []))} subject={title!r} queries={len(queries)}",
