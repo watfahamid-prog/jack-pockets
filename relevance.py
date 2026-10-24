@@ -116,7 +116,7 @@ def _asset_search_queries(beat: dict, limit: int = 4) -> list[str]:
     }
     normalized = []
     for candidate in candidates:
-        query = re.sub(r"\\s+", " ", candidate).strip(" ,.;:-")
+        query = re.sub(r"\s+", " ", candidate).strip(" ,.;:-")
         tokens = re.findall(r"[a-zA-Z0-9]{3,}", query.lower())
         concrete = [token for token in tokens if token not in stopwords and not token.isdigit()]
         if len(concrete) < 1:
