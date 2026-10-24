@@ -1,0 +1,57 @@
+{
+  "name": "jack-pockets-documentary",
+  "version": 1,
+  "framework": "google-research/harness2",
+  "framework_commit": "1cfe254e8d25b15f37048c3730134686abe60335",
+  "purpose": "Improve the documentary agent harness without changing model weights or weakening editorial quality gates.",
+  "components": {
+    "system_prompt": "The Jack Pockets documentary pipeline: research first, evidence-led story planning, subject-specific visuals, restrained graphics, provenance, and strict quality gates.",
+    "guardrails": [
+      "Never substitute unrelated footage just to fill a shot.",
+      "Never weaken relevance checks or quality gates to force a render.",
+      "Preserve source provenance and licensing metadata.",
+      "Prefer an intentional quality-gate failure over an irrelevant visual."
+    ],
+    "memory": "public/runs and committed editorial configuration are the durable episode evidence; experimental branches are not part of the baseline.",
+    "tool_guidance": [
+      "Use research sources for factual claims.",
+      "Use asset metadata and relevance scoring for visual selection.",
+      "Keep footage searches concise and subject-specific.",
+      "Validate final media with the existing quality gate and FFprobe checks."
+    ],
+    "subagents": [
+      "research",
+      "editorial-planning",
+      "asset-search",
+      "visual-selection",
+      "quality-control"
+    ],
+    "skills": [
+      "documentary-story-planning",
+      "source-verification",
+      "footage-relevance",
+      "provenance",
+      "video-quality-control"
+    ],
+    "scripts": [
+      "generate.py",
+      "editorial_brain.py",
+      "assets.py",
+      "relevance.py",
+      "quality.py",
+      "manifest.py"
+    ],
+    "plugins": [
+      "web research",
+      "licensed/open media providers",
+      "FFmpeg/FFprobe"
+    ]
+  },
+  "integration_policy": {
+    "mode": "opt-in",
+    "production_pipeline_unchanged_until_validated": true,
+    "api_spend_required_for_local_demo": false,
+    "api_spend_required_for_model_backed_recursion": true,
+    "never_auto_adopt_unvalidated_harness_changes": true
+  }
+}

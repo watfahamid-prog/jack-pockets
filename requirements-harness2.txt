@@ -1,0 +1,4 @@
+# Optional development dependency: Google Research Harness².
+# Keep this separate from requirements.txt because Harness² requires Python 3.12+,
+# while the Jack Pockets production pipeline currently supports Python 3.11.
+git+https://github.com/google-research/harness2.git@1cfe254e8d25b15f37048c3730134686abe60335
