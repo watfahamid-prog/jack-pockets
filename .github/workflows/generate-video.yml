@@ -7,17 +7,23 @@ on:
         description: "Original documentary topic"
         required: true
         type: string
-        default: "The 1997 AS 7007 Internet Routing Incident: How One Router Disrupted Internet Traffic"
+        default: "What Is the Most Expensive Thing Ever?"
+  # Temporary audit-only trigger; remove before proposing the production fix.
+  push:
+    branches:
+      - audit/full-documentary-render
 
 permissions:
   contents: read
 
 concurrency:
-  group: jack-pockets-documentary
+  group: jack-pockets-documentary-audit-v3
   cancel-in-progress: false
 
 jobs:
   generate:
+    env:
+      DOCUMENTARY_TOPIC: ${{ inputs.topic }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -79,6 +85,10 @@ jobs:
           test -f index.tsx
           test -f JackPocketsVideo.tsx
 
+      - name: Set default topic for push-triggered audit run
+        if: github.event_name == 'push'
+        run: echo "DOCUMENTARY_TOPIC=What Is the Most Expensive Thing Ever?" >> "$GITHUB_ENV"
+
       - name: Generate 1080p30 documentary
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -95,7 +105,6 @@ jobs:
           PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
           MUSIC_URL: ${{ secrets.MUSIC_URL }}
-          DOCUMENTARY_TOPIC: ${{ inputs.topic }}
         run: python generate.py --topic "$DOCUMENTARY_TOPIC" --assets-per-beat 2
 
       # Save useful research/plan/audio cache entries even when the quality gate
