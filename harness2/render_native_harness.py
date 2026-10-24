@@ -13,7 +13,7 @@ def _slug(value: str) -> str:
     return value.strip("-_") or "component"
 
 
-def render(manifest_path: Path, output_dir: Path) -> None:
+def render(manifest_path: Path, output_dir: Path, memory_path: Path | None = None) -> None:
     data = json.loads(manifest_path.read_text(encoding="utf-8"))
     components = data["components"]
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -30,9 +30,12 @@ def render(manifest_path: Path, output_dir: Path) -> None:
         str(components["system_prompt"]).strip() + "\n", encoding="utf-8"
     )
     (output_dir / "guardrails.md").write_text(guardrails, encoding="utf-8")
-    (output_dir / "LongTermMEMORY.md").write_text(
-        str(components["memory"]).strip() + "\n", encoding="utf-8"
-    )
+    memory_text = str(components["memory"]).strip()
+    if memory_path is not None:
+        if not memory_path.exists():
+            raise FileNotFoundError(f"Harness² memory overlay not found: {memory_path}")
+        memory_text = memory_path.read_text(encoding="utf-8").strip()
+    (output_dir / "LongTermMEMORY.md").write_text(memory_text + "\n", encoding="utf-8")
     (output_dir / "tool_descriptions").mkdir(parents=True, exist_ok=True)
     (output_dir / "tool_descriptions" / "tool_guidance.md").write_text(
         "# Jack Pockets tool guidance\n\n"
@@ -92,8 +95,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--manifest", type=Path, default=MANIFEST)
+    parser.add_argument(
+        "--memory",
+        type=Path,
+        help="Optional evidence-backed memory file to overlay as native Harness² LongTermMEMORY.md.",
+    )
     args = parser.parse_args()
-    render(args.manifest, args.output)
+    render(args.manifest, args.output, args.memory)
 
 
 if __name__ == "__main__":
