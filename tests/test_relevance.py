@@ -82,6 +82,26 @@ class AssetRelevanceTests(unittest.TestCase):
         self.assertIn("router", matched)
         self.assertIn("network", matched)
 
+    def test_accepts_core_technical_subject_when_title_omits_query_modifiers(self):
+        beat = {
+            "title": "The April 1997 Black Hole",
+            "keywords": ["1990s server room rack", "dial internet vintage computer", "network outage monitor graph"],
+        }
+        asset = {"title": "Database storage of a server", "description": "", "tags": []}
+        relevant, matched = _asset_relevance("1990s server room rack", beat, asset)
+        self.assertTrue(relevant)
+        self.assertEqual(matched, ["server"])
+
+    def test_rejects_modifier_only_match_from_unrelated_vintage_telephone(self):
+        beat = {
+            "title": "The April 1997 Black Hole",
+            "keywords": ["1990s server room rack", "dial internet vintage computer", "network outage monitor graph"],
+        }
+        asset = {"title": "A man talking to someone using a vintage telephone", "description": "", "tags": []}
+        relevant, matched = _asset_relevance("dial internet vintage computer", beat, asset)
+        self.assertFalse(relevant)
+        self.assertEqual(matched, [])
+
     def test_accepts_one_specific_subject_match_for_relevant_stock(self):
         beat = {
             "title": "Library archives historical manuscripts",

@@ -16,6 +16,12 @@ def _asset_relevance(query: str, beat: dict, asset: dict) -> tuple[bool, list[st
         "documentary", "story", "mistake", "forever", "bizarre", "internet",
         "footage", "video", "shot", "scene", "show", "showing", "clip", "visualization",
         "animation", "visual", "moment", "opens", "exposed",
+        # Descriptive modifiers often appear in stock titles but are not proof
+        # of the actual subject (e.g. "vintage telephone" for a computer query).
+        "vintage", "retro", "classic", "antique", "historic", "historical",
+        "1980s", "1990s", "2000s", "2010s", "2020s", "abstract", "dynamic",
+        "colorful", "futuristic", "digital", "luminous", "blinking", "glowing",
+        "close", "high", "tech",
     }
     # Use compact editorial metadata; long narration strings contain incidental words.
     target_text = " ".join([
@@ -46,9 +52,8 @@ def _asset_relevance(query: str, beat: dict, asset: dict) -> tuple[bool, list[st
     broad_terms = {
         "historical", "history", "archive", "archives", "manuscript",
         "manuscripts", "documentary", "footage", "visualization", "cinematic",
-        "modern", "ancient", "scene", "video", "screen", "monitor", "computer",
-        "network", "server", "cable", "office", "room", "person", "people",
-        "system", "data", "world", "lights", "map", "terminal",
+        "modern", "ancient", "scene", "video", "office", "room", "person", "people",
+        "system", "data", "lights",
     }
     strong_hits = [term for term in query_hits if len(term) >= 5 and term not in broad_terms]
     if len(query_terms) >= 3 and len(query_hits) < 2 and not strong_hits:

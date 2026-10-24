@@ -29,7 +29,7 @@ def _get(url:str,key:str,params:dict)->dict:
 MAX_ASSET_DOWNLOAD_BYTES = 125_000_000
 
 
-def _archive_title_is_non_broll(title: str) -> bool:
+def _archive_title_is_non_broll(title: str, query: str = "") -> bool:
     """Reject archive results that are clearly tutorials, shows, or demos."""
     patterns = (
         r"\btutorial\b", r"\bhow\s+to\b", r"\bfailsafe\b", r"\breflash\b",
@@ -40,7 +40,29 @@ def _archive_title_is_non_broll(title: str) -> bool:
         r"\bguide\b", r"\bmake\s+(?:an?\s+)?(?:ethernet|network|router|server|cable)\b",
         r"\bpart\s+\d+\b", r"\bTV\s+\d+\b",
     )
-    return any(re.search(pattern, str(title), re.IGNORECASE) for pattern in patterns)
+    if any(re.search(pattern, str(title), re.IGNORECASE) for pattern in patterns):
+        # A tutorial may be relevant only when the query itself explicitly asks
+        # for one; otherwise it is usually a branded demo rather than documentary b-roll.
+        query_terms = set(re.findall(r"[a-z0-9]+", str(query).lower()))
+        if not query_terms.intersection({"tutorial", "guide", "walkthrough", "demo", "review"}):
+            return True
+    # Internet Archive also indexes music-game playthroughs and entertainment
+    # episodes. They can match technical words accidentally (e.g. "Rock Band
+    # Network" for a network-switch query), so reject them unless the query is
+    # explicitly about games/music.
+    entertainment = (
+        r"\brock\s+band\b", r"\bgameplay\b", r"\bplaythrough\b",
+        r"\bvideo\s+game\b", r"\bnintendo\b", r"\bxbox\b",
+        r"\bplaystation\b", r"\bexpert\s+keys\b", r"\bvocals\b",
+        r"\bharmonies\b", r"\bmusic\b", r"\bsong\b",
+    )
+    query_text = str(query).lower()
+    asks_for_entertainment = any(
+        token in query_text for token in ("game", "gaming", "music", "song", "band", "console")
+    )
+    return not asks_for_entertainment and any(
+        re.search(pattern, str(title), re.IGNORECASE) for pattern in entertainment
+    )
 
 
 def _download(url, path, max_bytes: int = MAX_ASSET_DOWNLOAD_BYTES):
@@ -293,7 +315,7 @@ def search_archive_videos(query:str,out:Path,limit:int=3,beat:dict|None=None)->l
             if not identifier or identifier in seen:
                 continue
             title = str(doc.get("title") or "")
-            if _archive_title_is_non_broll(title):
+            if _archive_title_is_non_broll(title, query):
                 print(
                     f"[archive] rejected program/tutorial result title={title[:100]!r}",
                     flush=True,
