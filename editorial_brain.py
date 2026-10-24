@@ -112,6 +112,13 @@ def _asset_relevance(asset: dict, sentence_terms: set[str], role: str) -> float:
     metadata_terms: set[str] = set()
     for field in ("title", "description", "tags"):
         metadata_terms.update(_tokens(asset.get(field, "")))
+    # Asset acquisition already passed the strict query-to-metadata relevance
+    # gate. Preserve those *observed metadata matches* for downstream shot
+    # selection: some providers expose only weak URL slugs as titles, so a clip
+    # can pass acquisition yet become unusable when we score it a second time.
+    # Do not use the copied query or beat keywords here; those are not asset
+    # metadata and could make unrelated footage appear relevant.
+    metadata_terms.update(_tokens(asset.get("relevance_terms", [])))
     overlap = sentence_terms & metadata_terms
     score = len(overlap) * 6.0
     kind = str(asset.get("kind", "")).lower()

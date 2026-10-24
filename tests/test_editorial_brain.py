@@ -33,6 +33,30 @@ class FootageMatchingTests(unittest.TestCase):
         }
         self.assertLess(_asset_score(asset, terms, "b-roll"), 5)
 
+    def test_validated_metadata_match_survives_provider_title_reduction(self):
+        beat = {
+            "id": "beat-provider-metadata",
+            "start": 0,
+            "end": 5,
+            "title": "AS 7007 routing incident",
+            "keywords": ["router network"],
+            "narration": "The route was withdrawn.",
+            "assets": [
+                {
+                    "id": "accepted-router-clip",
+                    "kind": "video",
+                    "title": "video 123",
+                    "description": "",
+                    "tags": [],
+                    # These terms were matched against the provider's real
+                    # metadata by the upstream strict relevance gate.
+                    "relevance_terms": ["router", "network"],
+                }
+            ],
+        }
+        shots = build_shots(beat)["shots"]
+        self.assertEqual(shots[0]["assetIds"], ["accepted-router-clip"])
+
     def test_shots_select_sentence_relevant_assets(self):
         beat = {
             "id": "beat-1", "start": 0, "end": 8,
