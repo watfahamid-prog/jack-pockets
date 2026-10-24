@@ -51,6 +51,25 @@ jobs:
           uv venv --python 3.12 .venv
           uv pip install --python .venv/bin/python -e '.[render]'
 
+      - name: Render Jack Pockets into Harness² native c1-c8 surface
+        run: |
+          python harness2/render_native_harness.py --output harness2/native
+
+      - name: Validate native c1-c8 surface with pinned Harness²
+        working-directory: harness2-upstream
+        run: |
+          ../harness2-upstream/.venv/bin/python - <<'PY'
+          from pathlib import Path
+          from harness2.core.tree import read_tree, validate
+          from harness2.substrate.opencode import OPENCODE_SURFACE, compose_prompt
+
+          root = Path("..") / "harness2" / "native"
+          tree = read_tree(OPENCODE_SURFACE, root)
+          census = validate(OPENCODE_SURFACE, tree, allow_subagents=True)
+          compose_prompt(root)
+          print("Validated Jack Pockets native Harness² surface:", census)
+          PY
+
       - name: Run local demo without model credentials
         working-directory: harness2-upstream
         run: |
