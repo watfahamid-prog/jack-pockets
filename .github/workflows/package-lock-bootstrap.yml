@@ -1,0 +1,52 @@
+name: Bootstrap npm lockfile (temporary)
+
+on:
+  push:
+    branches:
+      - stability/pin-remotion-dependencies
+    paths:
+      - ".github/workflows/package-lock-bootstrap.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap-lockfile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: stability/pin-remotion-dependencies
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Resolve dependency versions and write an exact lockfile
+        run: |
+          npm install
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+          for (const group of ['dependencies', 'devDependencies']) {
+            for (const name of Object.keys(pkg[group] || {})) {
+              const resolved = lock.packages?.[`node_modules/${name}`]?.version;
+              if (!resolved) throw new Error(`No resolved version in lockfile for ${name}`);
+              pkg[group][name] = resolved;
+            }
+          }
+          fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          NODE
+          npm install --package-lock-only
+          npm ci
+          npm run typecheck
+      - name: Commit the tested lockfile and exact direct versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git diff --cached --quiet && exit 0
+          git commit -m "build: pin Node dependencies and add package lock"
+          git push origin HEAD:stability/pin-remotion-dependencies
