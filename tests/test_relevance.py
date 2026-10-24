@@ -139,6 +139,42 @@ class AssetRelevanceTests(unittest.TestCase):
         self.assertTrue(relevant)
         self.assertEqual(matched, ["network", "router"])
 
+    def test_accepts_specific_subject_match_when_stock_title_omits_modifiers(self):
+        beat = {
+            "title": "The Black Hole Effect",
+            "keywords": ["oscilloscope data signal drop flatline"],
+        }
+        asset = {
+            "title": "Close up of oscilloscope with waveform display",
+            "description": "An oscilloscope in operation.",
+            "tags": [],
+        }
+        relevant, matched = _asset_relevance(
+            "oscilloscope data signal drop flatline", beat, asset
+        )
+        self.assertTrue(relevant)
+        self.assertIn("oscilloscope", matched)
+
+    def test_rejects_asset_that_matches_other_beat_keywords_but_not_active_query(self):
+        beat = {
+            "title": "The Persistent Phantom",
+            "keywords": [
+                "ethernet cable disconnected server back",
+                "terminal screen clearing memory cache",
+                "network engineer typing frantically 1990s",
+            ],
+        }
+        asset = {
+            "title": "A river bank in autumn",
+            "description": "Beautiful autumn scenery.",
+            "tags": [],
+        }
+        relevant, matched = _asset_relevance(
+            "ethernet cable disconnected server back", beat, asset
+        )
+        self.assertFalse(relevant)
+        self.assertEqual(matched, [])
+
     def test_rejects_substring_only_match(self):
         beat = {"title": "car", "keywords": ["car"]}
         asset = {"title": "Carpet installation", "description": "Carpet fitting"}
