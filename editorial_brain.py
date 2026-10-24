@@ -13,6 +13,7 @@ STOP = {
     "should", "will", "do", "does", "did", "not", "no", "yes",
 }
 MIN_VISUAL_RELEVANCE = 7.0
+MAX_ASSET_USES_PER_BEAT = 4
 STATIC_ROLES = {"map", "document", "screenshot", "chart"}
 
 
@@ -147,11 +148,15 @@ def build_shots(beat, seed=42, aligned_words=None, sentences_override=None):
     # Beat-level subject terms provide a conservative fallback for connective
     # narration ("that changed everything") when the shot itself has no nouns.
     # This keeps footage on-topic without falling back to unrelated stock.
-    beat_context = " ".join([
-        str(beat.get("title", "")),
-        " ".join(str(item) for item in (beat.get("keywords") or [])),
-    ])
-    beat_terms = set(keywords(beat_context))
+    beat_terms = set(keywords(str(beat.get("title", ""))))
+    context_keywords = beat.get("keywords") or []
+    if isinstance(context_keywords, str):
+        context_keywords = re.split(r"[,;|]", context_keywords)
+    # keywords() intentionally caps sentence keywords to eight, but a beat's
+    # search keywords are separate, curated phrases. Process each phrase
+    # independently so the title cannot crowd out all of the actual subject terms.
+    for keyword in context_keywords:
+        beat_terms.update(keywords(str(keyword)))
 
     for index, sentence in enumerate(sentence_list):
         intent, reason, intensity = classify(sentence)
@@ -181,37 +186,46 @@ def build_shots(beat, seed=42, aligned_words=None, sentences_override=None):
         layers = []
         chosen = None
         if assets:
-            # Jack Pockets is footage-led: normal narration gets moving footage only.
-            # Static images are reserved for explicit evidence/map/chart/document roles.
-            relevant_videos = [
+            # Build both a sentence-specific set and a beat-subject set. The
+            # latter is a fallback for connective sentences but must still match
+            # a concrete, curated keyword in this beat.
+            sentence_videos = [
                 asset for asset in assets
                 if str(asset.get("kind", "")).lower() == "video"
                 and _asset_relevance(asset, terms, role) >= MIN_VISUAL_RELEVANCE
             ]
-            if not relevant_videos and beat_terms:
-                # Use a clip that clearly matches the beat's named subject when a
-                # sentence-level match is impossible. Do not use generic fallbacks.
-                relevant_videos = [
-                    asset for asset in assets
-                    if str(asset.get("kind", "")).lower() == "video"
-                    and _asset_relevance(asset, beat_terms, role) >= MIN_VISUAL_RELEVANCE
-                ]
-            if relevant_videos:
-                eligible = relevant_videos
-            elif role in STATIC_ROLES:
-                eligible = [
+            context_videos = [
+                asset for asset in assets
+                if str(asset.get("kind", "")).lower() == "video" and beat_terms
+                and _asset_relevance(asset, beat_terms, role) >= MIN_VISUAL_RELEVANCE
+            ]
+            video_by_id = {str(asset["id"]): asset for asset in [*sentence_videos, *context_videos]}
+            # Keep all subject-relevant clips available so a strong match for one
+            # sentence cannot monopolize every shot in the beat.
+            video_candidates = list(video_by_id.values())
+            eligible = [
+                asset for asset in video_candidates
+                if used_counts.get(str(asset["id"]), 0) < MAX_ASSET_USES_PER_BEAT
+                and str(asset["id"]) != previous_asset_id
+            ]
+
+            if not eligible and role in STATIC_ROLES:
+                static_candidates = [
                     asset for asset in assets
                     if str(asset.get("kind", "")).lower() in {"photo", "generated", "document"}
                     and _asset_relevance(asset, terms, role) >= MIN_VISUAL_RELEVANCE
                 ]
-                if not eligible:
-                    eligible = [
+                if not static_candidates:
+                    static_candidates = [
                         asset for asset in assets
                         if str(asset.get("kind", "")).lower() in {"generated", "document"}
                         and str(asset.get("role", "")).lower() == role
                     ]
-            else:
-                eligible = []
+                eligible = [
+                    asset for asset in static_candidates
+                    if used_counts.get(str(asset["id"]), 0) < MAX_ASSET_USES_PER_BEAT
+                    and str(asset["id"]) != previous_asset_id
+                ]
 
             if eligible:
                 semantic_scores = {}
@@ -222,10 +236,17 @@ def build_shots(beat, seed=42, aligned_words=None, sentences_override=None):
                         print("[visuals] local semantic reranking enabled", flush=True)
                     except Exception as exc:
                         print(f"[visuals] semantic reranking unavailable; using lexical ranking: {exc}", flush=True)
+
+                # Diversity is an explicit first-class constraint: among eligible
+                # subject-matched clips, use the least-reused asset next, then
+                # prefer a sentence-level match, semantic/lexical score and stable ID.
+                sentence_ids = {str(asset["id"]) for asset in sentence_videos}
                 ranked = sorted(
                     eligible,
                     key=lambda asset: (
-                        _asset_score(asset, terms, role, used_counts.get(str(asset["id"]), 0), previous_asset_id)
+                        -used_counts.get(str(asset["id"]), 0),
+                        str(asset["id"]) in sentence_ids,
+                        _asset_score(asset, terms, role, used_counts.get(str(asset["id"]), 0), "")
                         + semantic_scores.get(str(asset["id"]), 0.0) * 10.0,
                         str(asset.get("kind", "")).lower() == "video",
                         str(asset["id"]),
