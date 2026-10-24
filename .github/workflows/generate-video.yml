@@ -8,6 +8,11 @@ on:
         required: true
         type: string
         default: "The 1997 AS 7007 Internet Routing Incident: How One Router Disrupted Internet Traffic"
+  # Temporary single-run trigger; remove immediately after it starts.
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/generate-video.yml"
 
 permissions:
   contents: read
@@ -18,9 +23,9 @@ concurrency:
 
 jobs:
   generate:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[one-time-documentary-verification]'))
     env:
-      DOCUMENTARY_TOPIC: ${{ inputs.topic }}
+      DOCUMENTARY_TOPIC: ${{ inputs.topic || 'The 1997 AS 7007 Internet Routing Incident: How One Router Disrupted Internet Traffic' }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
