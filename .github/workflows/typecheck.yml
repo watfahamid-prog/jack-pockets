@@ -23,5 +23,7 @@ jobs:
           python-version: "3.11"
       - run: npm ci
       - run: npm run typecheck
+      - name: Test caption timing across word gaps
+        run: npm run test:captions
       - name: Compile all Python modules
         run: python -m compileall -q .
