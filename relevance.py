@@ -106,7 +106,7 @@ def _asset_search_queries(beat: dict, limit: int = 4) -> list[str]:
         "cost", "story", "conclusion", "emerging", "frontier", "explained",
         "revealed", "reveals", "secret", "secrets", "journey", "future", "human",
         "ambition", "footage", "video", "scene", "cinematic", "beautiful",
-        "dramatic", "sequence", "sweeping", "view", "views", "shot", "shots",
+        "dramatic", "sequence", "sweeping", "shot", "shots",
         "archival", "contemporary", "establishing", "contrasted", "generated",
     }
 
@@ -141,7 +141,7 @@ def _asset_search_queries(beat: dict, limit: int = 4) -> list[str]:
         "cost", "story", "conclusion", "emerging", "frontier", "explained",
         "revealed", "reveals", "secret", "secrets", "journey", "future", "human",
         "ambition", "footage", "video", "scene", "cinematic", "beautiful",
-        "dramatic", "sequence", "sweeping", "view", "views", "shot", "shots",
+        "dramatic", "sequence", "sweeping", "shot", "shots",
         "archival", "contemporary", "establishing", "contrasted", "generated",
     }
     normalized = []
