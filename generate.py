@@ -73,7 +73,7 @@ def main() -> None:
             print(f"[research] beat {index} search skipped: {exc}", flush=True)
             found = []
         beat["research"] = found
-        verified_candidate_urls = _relevant_sources(args.topic, beat, found)
+        verified_candidate_urls = _relevant_sources(args.topic, beat, [*topic_research, *found])
         beat["source_urls"] = verified_candidate_urls
         if not verified_candidate_urls:
             print(f"[research] beat {index}: no sufficiently relevant source found; claims need review", flush=True)
