@@ -2,7 +2,7 @@ name: Qwen + OpenCode AI repair (isolated PR)
 
 on:
   push:
-    branches: [qwen-opencode-repair-now]
+    branches: [qwen-opencode-repair-now, main]
   workflow_dispatch:
     inputs:
       task:
@@ -63,6 +63,32 @@ jobs:
       - name: Install OpenCode
         run: npm install --global opencode-ai
 
+      - name: Configure OpenCode to use local Ollama explicitly
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.config/opencode"
+          cat > "$HOME/.config/opencode/opencode.json" <<'JSON'
+          {
+            "$schema": "https://opencode.ai/config.json",
+            "provider": {
+              "ollama": {
+                "npm": "@ai-sdk/openai-compatible",
+                "name": "Ollama local",
+                "options": {
+                  "baseURL": "http://127.0.0.1:11434/v1"
+                },
+                "models": {
+                  "qwen3:4b": {
+                    "name": "Qwen3 4B"
+                  }
+                }
+              }
+            }
+          }
+          JSON
+          cat "$HOME/.config/opencode/opencode.json"
+
       - name: Create isolated repair branch
         id: branch
         shell: bash
@@ -94,7 +120,7 @@ jobs:
             "- Write a concise summary of changed files, root cause, and commands run to: $SUMMARY_PATH" \
             "- If the task is unsafe or cannot be completed, explain why and do not fabricate a fix." \
             > "$RUNNER_TEMP/agent-task.txt"
-          timeout 35m opencode run --model ollama/qwen3:4b "$(cat "$RUNNER_TEMP/agent-task.txt")" 2>&1 | tee "$RUNNER_TEMP/opencode-repair.log"
+          timeout 35m opencode --standalone --print-logs --log-level DEBUG run --model ollama/qwen3:4b "$(cat "$RUNNER_TEMP/agent-task.txt")" 2>&1 | tee "$RUNNER_TEMP/opencode-repair.log"
           git diff --check
           if git status --porcelain | grep -E "^[ MARCUD?!]{2} \.github/workflows/|^[ MARCUD?!]{2} requirements[^/]*$"; then
             echo "Agent changed a workflow or dependency manifest; refusing to publish it automatically." >&2
