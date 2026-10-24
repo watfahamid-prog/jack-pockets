@@ -21,7 +21,7 @@ concurrency:
 jobs:
   verify-local-ai:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 50
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -60,6 +60,7 @@ jobs:
         run: ollama pull qwen3:4b
 
       - name: Run real Qwen documentary-plan smoke test
+        id: qwen_smoke
         env:
           LLM_PROVIDER: qwen
           QWEN_BASE_URL: http://127.0.0.1:11434/v1
@@ -68,14 +69,14 @@ jobs:
           QWEN_TIMEOUT_SECONDS: "600"
         run: |
           set -o pipefail
-          python qwen_smoke_test.py --topic "${{ inputs.topic || 'What Is the Most Expensive Thing Ever?' }}" --output out/qwen-smoke-test-plan.json 2>&1 | tee "$RUNNER_TEMP/qwen-smoke-test.log"
+          timeout 25m python qwen_smoke_test.py --topic "${{ inputs.topic || 'What Is the Most Expensive Thing Ever?' }}" --output out/qwen-smoke-test-plan.json 2>&1 | tee "$RUNNER_TEMP/qwen-smoke-test.log"
 
       - name: Install OpenCode CLI
         if: always() && steps.ollama_setup.conclusion == 'success'
         run: npm install --global opencode-ai
 
       - name: Verify OpenCode can use local Qwen and make a test change
-        if: always() && steps.ollama_setup.conclusion == 'success'
+        if: steps.ollama_setup.conclusion == 'success' && steps.qwen_smoke.conclusion == 'success'
         shell: bash
         env:
           OLLAMA_HOST: http://127.0.0.1:11434
