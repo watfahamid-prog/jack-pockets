@@ -1,0 +1,26 @@
+import json
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch, Mock
+import video_qc
+
+class VideoQCTests(unittest.TestCase):
+    def test_reports_metadata_audio_and_black_segments(self):
+        with tempfile.TemporaryDirectory() as directory:
+            video = Path(directory) / "test.mp4"
+            video.write_bytes(b"video")
+            probe = {"streams": [{"codec_type": "video", "width": 1920, "height": 1080, "r_frame_rate": "30/1"}, {"codec_type": "audio"}], "format": {"duration": "12.5"}}
+            completed = Mock(stderr="black_start:1.0 black_end:2.0 black_duration:1.0", stdout="")
+            with patch.object(video_qc.shutil, "which", return_value="/usr/bin/tool"), patch.object(video_qc, "_run", return_value=json.dumps(probe)), patch.object(video_qc.subprocess, "run", return_value=completed):
+                report = video_qc.inspect_video(str(video), use_scene_detect=False)
+        self.assertEqual(report["duration_seconds"], 12.5)
+        self.assertTrue(report["has_audio"])
+        self.assertEqual(len(report["black_segments_over_0_5s"]), 1)
+
+    def test_missing_video_raises(self):
+        with self.assertRaises(FileNotFoundError):
+            video_qc.inspect_video("missing-test-video.mp4")
+
+if __name__ == "__main__":
+    unittest.main()

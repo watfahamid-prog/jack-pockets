@@ -8,6 +8,30 @@ from urllib.parse import quote
 
 import requests
 
+MAX_MUSIC_DOWNLOAD_BYTES = 60_000_000
+
+
+def _download_limited(response, destination: Path, limit: int = MAX_MUSIC_DOWNLOAD_BYTES) -> int:
+    """Stream a music response to disk while enforcing a hard byte limit."""
+    declared = response.headers.get("content-length")
+    if declared:
+        try:
+            if int(declared) > limit:
+                raise RuntimeError("Music download exceeds {:,}-byte limit".format(limit))
+        except ValueError:
+            pass
+    total = 0
+    with destination.open("wb") as handle:
+        for chunk in response.iter_content(chunk_size=256 * 1024):
+            if not chunk:
+                continue
+            total += len(chunk)
+            if total > limit:
+                raise RuntimeError("Music download exceeds {:,}-byte limit".format(limit))
+            handle.write(chunk)
+    return total
+
+
 HEADERS = {
     "User-Agent": "JackPocketsDocumentary/1.0 (music sourcing; https://github.com/watfahamid-prog/jack-pockets)"
 }
@@ -98,10 +122,7 @@ def _archive_music(query: str, out: Path, duration: float | None) -> Path | None
                 content_type = download.headers.get("content-type", "").lower()
                 if "text/html" in content_type:
                     continue
-                with source.open("wb") as handle:
-                    for chunk in download.iter_content(chunk_size=1024 * 1024):
-                        if chunk:
-                            handle.write(chunk)
+                _download_limited(download, source)
             if source.stat().st_size < 20_000:
                 source.unlink(missing_ok=True)
                 continue
@@ -172,10 +193,7 @@ def get_music(query: str, out: Path, duration: float | None = None) -> Path | No
                 content_type = response.headers.get("content-type", "").lower()
                 if "text/html" in content_type:
                     raise RuntimeError("MUSIC_URL returned a web page, not a direct audio file")
-                with source.open("wb") as handle:
-                    for chunk in response.iter_content(chunk_size=1024 * 1024):
-                        if chunk:
-                            handle.write(chunk)
+                _download_limited(response, source)
             if source.stat().st_size < 2048:
                 raise RuntimeError("MUSIC_URL returned an empty or invalid audio file")
             _prepare_audio(source, out, duration)

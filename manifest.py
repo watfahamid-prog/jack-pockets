@@ -32,5 +32,5 @@ def build(plan,audio_src,words,assets_by_beat,profile,out):
     duration=max((b["end"] for b in beats),default=0)
     if duration<480: raise ValueError(f"Documentary is too short ({duration/60:.1f} min).")
     if duration>1800: raise ValueError(f"Documentary is too long ({duration/60:.1f} min).")
-    m={"version":2,"title":plan.get("title",plan["topic"]),"topic":plan["topic"],"duration":round(duration,3),"fps":profile["fps"],"width":profile["width"],"height":profile["height"],"audioSrc":audio_src,"beats":beats,"captions":words,"sources":plan.get("sources",[])}
+    m={"version":2,"title":plan.get("title",plan["topic"]),"topic":plan["topic"],"duration":round(duration,3),"fps":profile["fps"],"width":profile["width"],"height":profile["height"],"audioSrc":audio_src,"beats":beats,"captions":words,"showCaptions":True,"showProgressBar":False,"sources":plan.get("sources",[])}
     Path(out).write_text(json.dumps(m,indent=2),encoding="utf-8");return out
