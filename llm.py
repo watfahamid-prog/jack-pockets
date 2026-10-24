@@ -291,7 +291,7 @@ def _qwen(topic: str, research: list[dict] | None = None) -> dict:
             too_short = any(marker in message for marker in ("narration words", "usable beats", "need at least 8"))
             if attempt == 0 and too_short:
                 prompt += (
-                    "\\n\\nLENGTH REPAIR — the previous plan did not meet the long-form requirements. "
+                    "\n\nLENGTH REPAIR — the previous plan did not meet the long-form requirements. "
                     "Return a complete revised JSON plan with 10-12 beats, about 150-190 words of narration "
                     "per beat, and at least 1,500 spoken words total. Keep the story original and coherent; "
                     "do not pad with repeated ideas. Keep at least two specific searchable keywords per beat "
