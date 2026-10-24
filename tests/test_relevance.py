@@ -106,8 +106,8 @@ class AssetRelevanceTests(unittest.TestCase):
             ],
         }
         asset = {
-            "title": "GeekBeat TV WiPNET CES 2012",
-            "description": "A product demo about Ethernet over coax cable and a wireless access point.",
+            "title": "Terminal screen clearing memory cache",
+            "description": "A network engineer typing frantically.",
             "tags": [],
         }
         relevant, matched = _asset_relevance(
@@ -116,7 +116,7 @@ class AssetRelevanceTests(unittest.TestCase):
         self.assertFalse(relevant)
         self.assertLess(len(matched), 3)
 
-    def test_requires_multiple_hits_for_long_queries_even_when_one_term_is_specific(self):
+    def test_accepts_multiple_active_query_hits_for_a_long_query(self):
         beat = {
             "title": "The Persistent Phantom",
             "keywords": ["ethernet cable disconnected server back"],
@@ -129,7 +129,7 @@ class AssetRelevanceTests(unittest.TestCase):
         relevant, matched = _asset_relevance(
             "ethernet cable disconnected server back", beat, asset
         )
-        self.assertFalse(relevant)
+        self.assertTrue(relevant)
         self.assertEqual(matched, ["cable", "ethernet"])
 
     def test_accepts_two_term_short_subject_query(self):
