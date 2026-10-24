@@ -1,5 +1,7 @@
 name: Test Commit Logging
 
+permissions: {}
+
 on:
   push:
   workflow_dispatch:
