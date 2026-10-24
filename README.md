@@ -10,7 +10,7 @@ Topic → research → long-form story plan → narration → word alignment →
 
 ## Run locally
 
-Requirements: Python 3.11, Node.js 20, FFmpeg, and at least one supported LLM API key.
+Requirements: Python 3.11, Node.js 20, FFmpeg, and either a supported hosted LLM API key or the experimental local Qwen provider (Ollama).
 
 ```bash
 npm install
@@ -27,10 +27,12 @@ Use `.github/workflows/generate-video.yml` and run **Generate Jack Pockets Style
 
 ## Providers
 
-Required: at least one LLM provider key:
+For `LLM_PROVIDER=auto`, configure at least one hosted provider key:
 - `GEMINI_API_KEY`
 - `OPENAI_API_KEY`
 - `ANTHROPIC_API_KEY`
+
+For a no-API-key local experiment, set `LLM_PROVIDER=qwen` and configure Ollama as documented in `QWEN.md`. Qwen is not selected by `auto` and remains opt-in.
 
 Recommended for real footage:
 - `PEXELS_API_KEY`
