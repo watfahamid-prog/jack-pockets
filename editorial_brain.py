@@ -251,14 +251,15 @@ def build_shots(beat, seed=42, aligned_words=None, sentences_override=None):
                 ranked = sorted(
                     eligible,
                     key=lambda asset: (
-                        -used_counts.get(str(asset["id"]), 0),
-                        str(asset["id"]) in sentence_ids,
-                        _asset_score(asset, terms, role, used_counts.get(str(asset["id"]), 0), "")
-                        + semantic_scores.get(str(asset["id"]), 0.0) * 10.0,
-                        str(asset.get("kind", "")).lower() == "video",
+                        used_counts.get(str(asset["id"]), 0),
+                        str(asset["id"]) not in sentence_ids,
+                        -(
+                            _asset_score(asset, terms, role, used_counts.get(str(asset["id"]), 0), "")
+                            + semantic_scores.get(str(asset["id"]), 0.0) * 10.0
+                        ),
+                        str(asset.get("kind", "")).lower() != "video",
                         str(asset["id"]),
                     ),
-                    reverse=True,
                 )
                 chosen = ranked[0]
                 used_counts[str(chosen["id"])] = used_counts.get(str(chosen["id"]), 0) + 1
@@ -309,7 +310,7 @@ def build_shots(beat, seed=42, aligned_words=None, sentences_override=None):
             candidate = (prev_end + next_start) / 2.0
             # Keep enough room for every remaining shot; short beats can use
             # shorter shots, but no boundary is allowed to move backwards.
-            min_step = min(0.05, total / max(1, len(shots)))
+            min_step = min(0.25, total / max(1, len(shots)))
             lower = boundaries[-1] + min_step
             upper = total - min_step * (len(shots) - index)
             candidate = max(lower, min(upper, candidate))
