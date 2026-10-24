@@ -36,6 +36,8 @@ def _archive_title_is_non_broll(title: str) -> bool:
         r"\bwalkthrough\b", r"\bpodcast\b", r"\bepisode\b", r"\bCES\s+20\d{2}\b",
         r"\bdemo\b", r"\breview\b", r"\bcourse\b", r"\bclass\s+materials\b",
         r"\btraining\b", r"\blecture\b", r"\bwebinar\b", r"\bsetup\b",
+        r"\bDIY\b", r"\bfirmware\b", r"\bconfigure\b", r"\bconfiguration\b",
+        r"\bguide\b", r"\bmake\s+(?:an?\s+)?(?:ethernet|network|router|server|cable)\b",
         r"\bpart\s+\d+\b", r"\bTV\s+\d+\b",
     )
     return any(re.search(pattern, str(title), re.IGNORECASE) for pattern in patterns)
