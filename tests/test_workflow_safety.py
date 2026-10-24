@@ -16,6 +16,7 @@ class WorkflowSafetyTests(unittest.TestCase):
         self.assertIn("Record Harness² run feedback", workflow)
         self.assertIn('JACKPOCKETS_VIDEO_QC: "1"', workflow)
         self.assertIn("public/runs/**/video-qc.json", workflow)
+        self.assertIn("ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}", workflow)
         self.assertNotIn('run: python generate.py --topic "${{ inputs.topic }}"', workflow)
 
 
