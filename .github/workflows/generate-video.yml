@@ -20,9 +20,9 @@ concurrency:
 
 jobs:
   generate:
-    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/full-free-acceptance'
+    if: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/full-free-acceptance' }}
     env:
-      DOCUMENTARY_TOPIC: ${{ inputs.topic || 'The 1997 AS 7007 Internet Routing Incident: How One Router Disrupted Internet Traffic' }}
+      DOCUMENTARY_TOPIC: ${{ github.event.inputs.topic || 'The 1997 AS 7007 Internet Routing Incident: How One Router Disrupted Internet Traffic' }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
