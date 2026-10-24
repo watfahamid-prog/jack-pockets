@@ -85,6 +85,7 @@ jobs:
           PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
           MUSIC_URL: ${{ secrets.MUSIC_URL }}
+          # Keep user-controlled input in the environment, never inline it in shell source.
           DOCUMENTARY_TOPIC: ${{ inputs.topic }}
         run: python generate.py --topic "$DOCUMENTARY_TOPIC" --assets-per-beat 2
 
