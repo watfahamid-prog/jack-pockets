@@ -28,3 +28,9 @@ jobs:
 
       - name: Test footage and research relevance
         run: python -m unittest discover -s tests -p "test_relevance.py" -v
+
+      - name: Install client dependency for mocked Qwen provider test
+        run: python -m pip install "openai>=1.40.0" "python-dotenv>=1.0.1"
+
+      - name: Test Qwen provider without calling a model
+        run: python -m unittest discover -s tests -p "test_qwen_provider.py" -v
