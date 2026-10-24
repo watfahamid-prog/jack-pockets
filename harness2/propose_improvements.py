@@ -28,7 +28,11 @@ RULES = [
     },
     {
         "id": "quality-gate",
-        "matches": ("quality gate failed", "final qc failed", "static-image gate", "distinct real video clips"),
+        "matches": (
+            "quality gate failed", "final qc failed", "static-image gate",
+            "distinct real video clips", "motion gate", "shot has no visual asset",
+            "shot has no asset", "shot has no visual layers", "visual coverage gap",
+        ),
         "lesson": "Preserve the existing visual quality gates; diagnose the failing condition instead of weakening thresholds.",
         "experiment": "Generate a targeted diagnostic report identifying failing beats and the exact gate evidence before rerunning.",
         "test": "Add or extend a regression fixture that reproduces the failure while asserting the gate still rejects it.",
