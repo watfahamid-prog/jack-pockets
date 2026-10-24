@@ -1,6 +1,8 @@
 name: Generate Jack Pockets Style Documentary
 
 on:
+  push:
+    branches: [full-free-acceptance]
   workflow_dispatch:
     inputs:
       topic:
@@ -18,9 +20,9 @@ concurrency:
 
 jobs:
   generate:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/full-free-acceptance'
     env:
-      DOCUMENTARY_TOPIC: ${{ inputs.topic }}
+      DOCUMENTARY_TOPIC: ${{ inputs.topic || 'The 1997 AS 7007 Internet Routing Incident: How One Router Disrupted Internet Traffic' }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -82,7 +84,8 @@ jobs:
           test -f index.tsx
           test -f JackPocketsVideo.tsx
 
-      - name: Generate 1080p30 documentary
+      - name: Generate 1080p30 documentary with configured providers
+        if: github.event_name == 'workflow_dispatch'
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ secrets.GEMINI_MODEL }}
