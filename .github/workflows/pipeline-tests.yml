@@ -28,6 +28,9 @@ jobs:
       - name: Test cache utility
         run: python -m unittest discover -s tests -p "test_cache_utils.py" -v
 
+      - name: Test bounded relevant asset downloads
+        run: python -m unittest discover -s tests -p "test_asset_download_budget.py" -v
+
       - name: Test footage and research relevance
         run: python -m unittest discover -s tests -p "test_relevance.py" -v
 
