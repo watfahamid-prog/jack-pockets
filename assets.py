@@ -78,12 +78,13 @@ def search_pexels_videos(query:str,out:Path,limit:int=4,beat:dict|None=None)->li
     result=[]
     for video in videos:
         files=[f for f in video.get("video_files",[]) if f.get("file_type")=="video/mp4" and f.get("link")]
-        # Prefer 720p/1080p; never choose 4K just because it has the most pixels.
+        # Prefer full-HD sources for the 1080p output, but never choose 4K just
+        # because it has the most pixels; the download-size guard is a second limit.
         capped = [f for f in files if int(f.get("width") or 0) <= 1920]
         files = capped or files
         files.sort(key=lambda f:(
-            abs(int(f.get("width") or 1280) - 1280),
-            abs(int(f.get("height") or 720) - 720),
+            abs(int(f.get("width") or 1920) - 1920),
+            abs(int(f.get("height") or 1080) - 1080),
             -float(f.get("fps") or 0),
         ))
         chosen=files[0] if files else None
