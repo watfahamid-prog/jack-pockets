@@ -20,6 +20,23 @@ class AssetRelevanceTests(unittest.TestCase):
         self.assertEqual(queries[2], "moon property commercial space")
         self.assertTrue(all(len(query.split()) <= 5 for query in queries))
 
+    def test_long_keyword_phrases_stay_separate_and_bounded(self):
+        beat = {
+            "title": "The One Hundred and Fifty Billion Dollar Machine",
+            "keywords": [
+                "international space station full view solar arrays",
+                "nasa mission control room houston operations",
+            ],
+            "visual_intent": "Full-station exterior tracking shot of the ISS with solar arrays, then NASA flight controllers in Houston.",
+        }
+        queries = _asset_search_queries(beat, limit=2)
+        self.assertEqual(queries, [
+            "international space station full view",
+            "nasa mission control room houston",
+        ])
+        self.assertTrue(all(len(query.split()) <= 5 for query in queries))
+        self.assertNotIn("dollar", " ".join(queries).lower())
+
     def test_media_queries_prioritize_specific_keywords_over_generic_chapter_title(self):
         beat = {
             "title": "The Emerging Frontier: Celestial Real Estate",

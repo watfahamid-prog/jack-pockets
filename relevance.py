@@ -92,15 +92,45 @@ def _asset_search_queries(beat: dict, limit: int = 4) -> list[str]:
 
     # Stock providers respond poorly to full narration/production directions
     # ("cinematic sequence", "sweeping view"). Search concrete subject phrases.
+    # Some editorial plans provide complete six-to-eight-word keyword phrases.
+    # Joining two such phrases creates one broad, low-quality query and pushes the
+    # actual subject out of the useful search terms. Keep long phrases separate
+    # (and bounded) so providers can return relevant clips for each visual idea.
     candidates = []
-    if len(keywords) >= 2:
-        candidates.append(" ".join(keywords[:2]))
-    if len(keywords) >= 3:
-        candidates.append(" ".join([keywords[0], keywords[-1]]))
-    if len(keywords) >= 4:
-        candidates.append(" ".join(keywords[-2:]))
-    elif len(keywords) == 3:
-        candidates.append(" ".join(keywords[1:]))
+
+    stopwords = {
+        "the", "and", "for", "with", "from", "that", "this", "then", "they",
+        "their", "there", "into", "about", "after", "before", "what", "when",
+        "where", "which", "while", "would", "could", "should", "have", "been",
+        "were", "was", "are", "has", "had", "most", "more", "than", "true",
+        "cost", "story", "conclusion", "emerging", "frontier", "explained",
+        "revealed", "reveals", "secret", "secrets", "journey", "future", "human",
+        "ambition", "footage", "video", "scene", "cinematic", "beautiful",
+        "dramatic", "sequence", "sweeping", "shot", "shots",
+        "archival", "contemporary", "establishing", "contrasted", "generated",
+    }
+
+    def concise_phrase(value: str) -> str:
+        tokens = re.findall(r"[a-zA-Z0-9]{3,}", value)
+        concrete = [token for token in tokens if token.lower() not in stopwords and not token.isdigit()]
+        return " ".join(concrete[:5])
+
+    concise_keywords = [concise_phrase(keyword) for keyword in keywords]
+    concise_keywords = [keyword for keyword in concise_keywords if keyword]
+    has_long_keyword_phrase = any(len(keyword.split()) > 3 for keyword in concise_keywords)
+    if has_long_keyword_phrase:
+        # Prefer one bounded query per concrete visual subject before trying a
+        # combined query or a chapter title that may be poetic rather than visual.
+        candidates.extend(concise_keywords)
+    else:
+        if len(keywords) >= 2:
+            candidates.append(" ".join(keywords[:2]))
+        if len(keywords) >= 3:
+            candidates.append(" ".join([keywords[0], keywords[-1]]))
+        if len(keywords) >= 4:
+            candidates.append(" ".join(keywords[-2:]))
+        elif len(keywords) == 3:
+            candidates.append(" ".join(keywords[1:]))
     candidates.extend([title, visual_intent])
 
     stopwords = {
@@ -111,7 +141,7 @@ def _asset_search_queries(beat: dict, limit: int = 4) -> list[str]:
         "cost", "story", "conclusion", "emerging", "frontier", "explained",
         "revealed", "reveals", "secret", "secrets", "journey", "future", "human",
         "ambition", "footage", "video", "scene", "cinematic", "beautiful",
-        "dramatic", "sequence", "sweeping", "view", "views", "shot", "shots",
+        "dramatic", "sequence", "sweeping", "shot", "shots",
         "archival", "contemporary", "establishing", "contrasted", "generated",
     }
     normalized = []
