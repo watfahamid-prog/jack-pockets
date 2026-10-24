@@ -133,7 +133,11 @@ def _relevant_sources(topic: str, beat: dict, sources: list[dict], limit: int = 
     # with weaker blogs or encyclopedia mirrors just to reach the requested count.
     if any(authority >= 2 for authority, _, _ in ranked):
         ranked = [entry for entry in ranked if entry[0] >= 2]
-    ranked.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    # Relevance is the primary ordering among sources that already meet the
+    # authority threshold: a contemporary incident report should outrank a
+    # general protocol paper for the incident-specific beat. Authority breaks
+    # ties and still excludes low-trust sources when better candidates exist.
+    ranked.sort(key=lambda item: (item[1], item[0]), reverse=True)
     return list(dict.fromkeys(url for _, _, url in ranked))[:limit]
 
 def _asset_search_queries(beat: dict, limit: int = 4) -> list[str]:
