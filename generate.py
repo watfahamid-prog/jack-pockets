@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from assets import generate_role_asset, make_asset_plan, search_pexels, search_pexels_videos, search_pixabay, search_pixabay_videos, search_commons_videos, search_commons_photos, search_archive_videos
@@ -102,28 +103,41 @@ def main() -> None:
         first_sentence = re.split(r"(?<=[.!?])\s+", narration_text)[0][:180]
         queries = _asset_search_queries(
             {**beat, "title": title, "keywords": beat_keywords, "narration": narration_text},
-            limit=min(4, max(2, args.assets_per_beat + 1)),
+            # Two high-quality subject-first queries are usually enough; the old
+            # default made three queries for every beat and multiplied provider downloads.
+            limit=min(3, max(2, args.assets_per_beat)),
+        )
+        print(
+            f"[assets] beat={index + 1}/{len(plan.get('beats', []))} subject={title!r} queries={len(queries)}",
+            flush=True,
         )
         stock_assets = []
         generated_assets = []
 
         for query in queries:
+            print(f"[assets] beat={index + 1} searching query={query!r}", flush=True)
             asset_dir = root / f"assets-{index}"
             videos = []
             providers = [
-                ("Pexels", lambda: search_pexels_videos(query, asset_dir, limit=4)),
-                ("Pixabay", lambda: search_pixabay_videos(query, asset_dir, limit=3)),
-                ("Wikimedia Commons", lambda: search_commons_videos(query, asset_dir, limit=3)),
-                ("Internet Archive", lambda: search_archive_videos(query, asset_dir, limit=3)),
+                ("Pexels", lambda: search_pexels_videos(query, asset_dir, limit=2, beat=beat)),
+                ("Pixabay", lambda: search_pixabay_videos(query, asset_dir, limit=2, beat=beat)),
+                ("Wikimedia Commons", lambda: search_commons_videos(query, asset_dir, limit=2, beat=beat)),
+                ("Internet Archive", lambda: search_archive_videos(query, asset_dir, limit=2, beat=beat)),
             ]
             for provider_name, search in providers:
-                if len(videos) >= 3:
+                if len(videos) >= 2:
                     break
+                provider_started = time.monotonic()
                 try:
                     found = search()
                 except Exception as exc:
                     print(f"[assets] {provider_name} video search failed for beat {index + 1}: {exc}", flush=True)
                     found = []
+                finally:
+                    print(
+                        f"[assets] provider={provider_name} beat={index + 1} elapsed={time.monotonic() - provider_started:.1f}s",
+                        flush=True,
+                    )
                 for item in found:
                     relevant, matched_terms = _asset_relevance(query, beat, item)
                     if not relevant:
