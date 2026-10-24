@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "generate": "python generate.py",
-    "render": "remotion render index.tsx JackPocketsVideo",
+    "render": "remotion render index.tsx JackPocketsVideo out/jack-pockets-documentary.mp4",
     "preview": "remotion studio index.tsx",
     "typecheck": "tsc --noEmit"
   },
