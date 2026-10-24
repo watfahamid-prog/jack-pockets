@@ -68,7 +68,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          BRANCH="qwen-opencode/repair-\${GITHUB_RUN_ID}"
+          BRANCH="qwen-opencode/repair-$GITHUB_RUN_ID"
           git switch -c "$BRANCH"
           echo "name=$BRANCH" >> "$GITHUB_OUTPUT"
           opencode --version | tee "$RUNNER_TEMP/opencode-version.log"
@@ -78,22 +78,25 @@ jobs:
         env:
           OLLAMA_HOST: http://127.0.0.1:11434
           REPAIR_TASK: ${{ inputs.task || 'Fix F-23 (unbounded music downloads) and F-8 (captions may never appear). Inspect the actual code first, make the smallest safe fixes, add regression tests, and do not change unrelated files.' }}
+          SUMMARY_PATH: ${{ runner.temp }}/repair-summary.md
         run: |
           set -euo pipefail
-          cat > "$RUNNER_TEMP/agent-task.txt" <<'TASK'
-          Repository repair task:
-          $REPAIR_TASK
-
-          Requirements:
-          - Inspect existing implementation and tests before editing; do not guess filenames or behavior.
-          - Make the smallest correct change addressing the requested task, and add focused regression tests.
-          - Do not modify unrelated files, secrets, workflow configuration, dependencies, or lockfiles unless the task demonstrably requires it.
-          - Do not call paid APIs or use external inference services. Use the local Ollama model only.
-          - Do not claim tests passed unless you run them.
-          - Leave a concise summary in "$RUNNER_TEMP/repair-summary.md" listing changed files, the root cause, and commands run. If the task is unsafe or cannot be completed, explain why and do not fabricate a fix.
-          TASK
+          printf '%s\n' \
+            "Repository repair task:" \
+            "$REPAIR_TASK" \
+            "" \
+            "Requirements:" \
+            "- Inspect existing implementation and tests before editing; do not guess filenames or behavior." \
+            "- Make the smallest correct change addressing the requested task, and add focused regression tests." \
+            "- Do not modify unrelated files, secrets, workflow configuration, dependencies, or lockfiles unless the task demonstrably requires it." \
+            "- Do not call paid APIs or use external inference services. Use the local Ollama model only." \
+            "- Do not claim tests passed unless you run them." \
+            "- Write a concise summary of changed files, root cause, and commands run to: $SUMMARY_PATH" \
+            "- If the task is unsafe or cannot be completed, explain why and do not fabricate a fix." \
+            > "$RUNNER_TEMP/agent-task.txt"
           timeout 35m opencode run --model ollama/qwen3:4b "$(cat "$RUNNER_TEMP/agent-task.txt")" 2>&1 | tee "$RUNNER_TEMP/opencode-repair.log"
           git diff --check
+          git add -N .
           git status --short
           git diff --stat | tee "$RUNNER_TEMP/repair-diff-stat.txt"
           if [ -z "$(git status --porcelain)" ]; then
