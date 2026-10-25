@@ -3,7 +3,7 @@ name: Qwen + OpenCode AI repair (isolated PR)
 
 on:
   push:
-    branches: [qwen-opencode-repair-now, qwen-opencode-audit-now]
+    branches: [qwen-opencode-repair-now, qwen-opencode-audit-now, enable-qwen-opencode-repair, enable-qwen-opencode-repair-v2, fix/qwen-opencode-workflow-conflicts]
   workflow_dispatch:
     inputs:
       task:
@@ -24,6 +24,8 @@ jobs:
   repair:
     runs-on: ubuntu-latest
     timeout-minutes: 75
+    env:
+      OLLAMA_CONTEXT_LENGTH: "16384"
     steps:
       - name: Check out current main as the repair base
         uses: actions/checkout@v4
