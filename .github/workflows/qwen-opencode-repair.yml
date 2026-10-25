@@ -125,7 +125,7 @@ jobs:
             "- Write a concise summary of changed files, root cause/findings, and commands run to: $SUMMARY_PATH" \
             "- If the task is unsafe or cannot be completed, explain why and do not fabricate a fix." \
             > "$RUNNER_TEMP/agent-task.txt"
-          timeout 35m opencode --standalone --print-logs --log-level DEBUG run --model ollama/qwen3:4b "$(cat "$RUNNER_TEMP/agent-task.txt")" 2>&1 | tee "$RUNNER_TEMP/opencode-repair.log"
+          timeout 35m opencode run --print-logs --log-level DEBUG --model ollama/qwen3:4b "$(cat "$RUNNER_TEMP/agent-task.txt")" 2>&1 | tee "$RUNNER_TEMP/opencode-repair.log"
           git diff --check
           if git status --porcelain | grep -E "^[ MARCUD?!]{2} \.github/workflows/|^[ MARCUD?!]{2} requirements[^/]*$"; then
             echo "Agent changed a workflow or dependency manifest; refusing to publish it automatically." >&2
