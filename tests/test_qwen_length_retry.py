@@ -56,7 +56,7 @@ class QwenLengthRetryTests(unittest.TestCase):
         )
         self.assertEqual(urlopen.call_count, 2)
         retry_payload = json.loads(urlopen.call_args_list[1].args[0].data.decode("utf-8"))
-        retry_prompt = retry_payload["messages"][-1]["content"]
+        retry_prompt = retry_payload["messages"][1]["content"]
         self.assertIn("LENGTH REPAIR", retry_prompt)
         self.assertIn("1,500 spoken words", retry_prompt)
 
