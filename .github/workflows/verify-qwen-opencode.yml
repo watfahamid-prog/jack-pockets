@@ -96,9 +96,9 @@ jobs:
                           "message_keys": sorted(msg.keys())})
           print("QWEN_PROBE_METADATA=" + json.dumps(metadata, sort_keys=True))
           print("QWEN_PROBE_CONTENT=" + repr(content[:160]))
-          if "QWEN_OK" not in content:
-              raise SystemExit("Qwen short probe failed: expected final text containing QWEN_OK")
-          print("Qwen short probe passed.")
+          if content.strip() != "QWEN_OK" or result.get("done_reason") == "length":
+              raise SystemExit("Qwen short probe failed: expected exact final text QWEN_OK without truncation")
+          print("Qwen short probe passed with exact final text.")
           PY
 
       - name: Run real Qwen documentary-plan smoke test
