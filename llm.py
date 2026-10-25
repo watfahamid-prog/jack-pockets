@@ -281,7 +281,7 @@ def _qwen(topic: str, research: list[dict] | None = None) -> dict:
             {"role": "system", "content": SYSTEM},
             {"role": "user", "content": prompt},
             # Qwen3 docs require this as the final assistant message before generation.
-            {"role": "assistant", "content": "<think>\\n\\n</think>\\n\\n"},
+            {"role": "assistant", "content": "<think>\n\n</think>\n\n"},
         ]
         if is_local_ollama:
             # Ollama's native API explicitly supports think=false for Qwen3.
