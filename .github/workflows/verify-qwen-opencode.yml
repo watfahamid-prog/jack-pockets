@@ -3,6 +3,8 @@ name: Verify Qwen and OpenCode (experimental)
 on:
   push:
     branches: [main, verify-qwen-opencode]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
     inputs:
       topic:
@@ -16,12 +18,12 @@ permissions:
 
 concurrency:
   group: qwen-opencode-verification
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   verify-local-ai:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 75
     env:
       OLLAMA_CONTEXT_LENGTH: "16384"
     steps:
@@ -43,11 +45,15 @@ jobs:
 
       - name: Install Ollama and start local service
         id: ollama_setup
+        timeout-minutes: 5
         shell: bash
         run: |
           set -euo pipefail
           curl -fsSL https://ollama.com/install.sh -o "$RUNNER_TEMP/ollama-install.sh"
-          sh "$RUNNER_TEMP/ollama-install.sh"
+          if ! timeout 240s sh "$RUNNER_TEMP/ollama-install.sh"; then
+            echo "Ollama installation failed or exceeded the 4-minute setup budget." >&2
+            exit 1
+          fi
           (ollama serve > "$RUNNER_TEMP/ollama.log" 2>&1 & echo $! > "$RUNNER_TEMP/ollama.pid")
           for attempt in $(seq 1 60); do
             if curl --silent --fail http://127.0.0.1:11434/api/tags >/dev/null; then
@@ -68,10 +74,11 @@ jobs:
           QWEN_BASE_URL: http://127.0.0.1:11434/v1
           QWEN_MODEL: qwen3:4b
           QWEN_API_KEY: ollama
-          QWEN_TIMEOUT_SECONDS: "600"
+          QWEN_TIMEOUT_SECONDS: "1800"
+          QWEN_MAX_TOKENS: "4000"
         run: |
           set -o pipefail
-          timeout 25m python qwen_smoke_test.py --topic "${{ inputs.topic || 'What Is the Most Expensive Thing Ever?' }}" --output out/qwen-smoke-test-plan.json 2>&1 | tee "$RUNNER_TEMP/qwen-smoke-test.log"
+          timeout 35m python qwen_smoke_test.py --topic "${{ inputs.topic || 'What Is the Most Expensive Thing Ever?' }}" --output out/qwen-smoke-test-plan.json 2>&1 | tee "$RUNNER_TEMP/qwen-smoke-test.log"
 
       - name: Install OpenCode CLI
         if: always() && steps.ollama_setup.conclusion == 'success'
