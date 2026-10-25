@@ -80,8 +80,8 @@ jobs:
               "model": os.environ["QWEN_MODEL"],
               "messages": [
                   {"role": "system", "content": "Be concise. Do not explain."},
-              {"role": "assistant", "content": "<think>\\n\\n</think>\\n\\n"},
-              {"role": "user", "content": "Reply with exactly: QWEN_OK"},
+                  {"role": "user", "content": "Reply with exactly: QWEN_OK"},
+                  {"role": "assistant", "content": "<think>\\n\\n</think>\\n\\n"},
               ],
               "stream": False, "think": False,
               "options": {"temperature": 0, "num_predict": 32, "num_ctx": 2048},
