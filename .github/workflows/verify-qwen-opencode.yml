@@ -2,7 +2,7 @@ name: Verify Qwen and OpenCode (experimental)
 
 on:
   push:
-    branches: [verify-qwen-opencode]
+    branches: [main, verify-qwen-opencode]
   workflow_dispatch:
     inputs:
       topic:
@@ -22,6 +22,8 @@ jobs:
   verify-local-ai:
     runs-on: ubuntu-latest
     timeout-minutes: 50
+    env:
+      OLLAMA_CONTEXT_LENGTH: "16384"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
