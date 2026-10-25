@@ -1,7 +1,7 @@
 name: Generate Jack Pockets Style Documentary
 
 on:
-workflow_dispatch:
+  workflow_dispatch:
     inputs:
       topic:
         description: "Original documentary topic"
