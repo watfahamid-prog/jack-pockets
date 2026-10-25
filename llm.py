@@ -275,8 +275,11 @@ def _qwen(topic: str, research: list[dict] | None = None) -> dict:
 
     for attempt in range(2):
         temperature = 0.4 if attempt == 0 else 0.25
+        # Qwen3 can emit its reasoning as ordinary content on some model templates.
+        # The empty think block is the documented Qwen3 way to force non-thinking mode.
         messages = [
             {"role": "system", "content": SYSTEM},
+            {"role": "assistant", "content": "<think>\n\n</think>\n\n"},
             {"role": "user", "content": prompt},
         ]
         if is_local_ollama:
@@ -288,6 +291,7 @@ def _qwen(topic: str, research: list[dict] | None = None) -> dict:
                 "messages": messages,
                 "stream": False,
                 "think": False,
+                "format": "json",
                 "options": {
                     "temperature": temperature,
                     "num_predict": max_tokens,
