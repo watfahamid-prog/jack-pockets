@@ -1,3 +1,4 @@
+# Qwen verification intentionally uses the non-thinking instruct variant.
 name: Verify Qwen and OpenCode (experimental)
 
 on:
