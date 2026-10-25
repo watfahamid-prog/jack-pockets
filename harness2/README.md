@@ -1,18 +1,18 @@
 # Harness² integration
 
-Jack Pockets now has an opt-in integration point for Google's open-source Harness² framework.
+Jack Pockets has an opt-in integration point for Google's open-source Harness² framework.
 
-## What is added
+## What is included
 
 - `requirements-harness2.txt` pins the upstream Harness² repository to a known commit.
-- `jack_pockets_harness.json` describes the current Jack Pockets agent harness using Harness²'s eight editable component categories: system prompt, guardrails, memory, tool guidance, subagents, skills, scripts, and plugins.
-- `render_native_harness.py` deterministically translates that manifest into an OpenCode-compatible Harness² c1-c8 surface under `harness2/native`.
-- Each production documentary run records a structured outcome and updates a bounded evidence ledger in the reusable GitHub Actions cache. Repeated observations are summarized into `harness2-learning-memory.md` and overlaid into the native Harness² `LongTermMEMORY.md`; the native surface is uploaded with the run diagnostics.
-- CI installs the pinned Harness² checkout and validates that generated surface with Harness²'s own OpenCode surface validator before running its credential-free demo.
+- `jack_pockets_harness.json` describes the current agent harness using Harness²'s eight editable component categories: system prompt, guardrails, memory, tool guidance, subagents, skills, scripts and plugins.
+- `render_native_harness.py` translates the manifest into native instruction and skill surfaces for Codex (`AGENTS.md`, `.agents/skills/`) and Claude Code (`CLAUDE.md`, `.claude/skills/`).
+- Each documentary run records a structured outcome and updates a bounded evidence ledger in the reusable GitHub Actions cache. Learning memory is overlaid into both generated instruction files and uploaded with diagnostics.
+- CI validates the manifest, runs the learning utility tests and checks the generated instruction/skill files before running the credential-free Harness² demo.
 
 ## Why it is isolated
 
-Harness² currently requires Python 3.12–3.13, while the production Jack Pockets pipeline supports Python 3.11. Do not add Harness² to the main production requirements or force the documentary renderer onto Python 3.12.
+Harness² currently requires Python 3.12–3.13, while the production Jack Pockets pipeline supports Python 3.11. Do not add Harness² to production requirements or force the renderer onto Python 3.12.
 
 Create a separate Python 3.12 environment when using Harness²:
 
@@ -23,7 +23,7 @@ uv pip install -r requirements-harness2.txt
 harness2-demo --output runs/harness2-demo --k 1
 ```
 
-To render the Jack Pockets native Harness² surface locally:
+To render both coding-agent instruction surfaces locally:
 
 ```bash
 python harness2/render_native_harness.py --output harness2/native
@@ -33,8 +33,8 @@ The local demo does not require model credentials. Model-backed Harness² recurs
 
 ## Adoption rule
 
-Harness² is an optimizer around the Jack Pockets agent harness, not a replacement for the documentary pipeline. Candidate improvements must be tested against Jack Pockets' existing research, relevance, provenance, and video quality gates before becoming production defaults.
+Harness² is an optimizer around the Jack Pockets agent harness, not a replacement for the documentary pipeline. Candidate improvements must be tested against existing research, relevance, provenance and video-quality gates before becoming production defaults.
 
-The evidence-memory overlay makes run observations available to the native Harness² harness on each run. It does not itself invoke model-backed recursive optimization or change production prompts/code. Generated skills, subagents, scripts, and plugins remain an integration boundary; production adoption remains a separate, validated step. The Actions cache is best-effort history, not a permanent database.
+The evidence-memory overlay makes run observations available to both coding-agent instruction surfaces. It does not itself invoke model-backed recursion or change production code. Generated skills, subagents, scripts and extensions remain integration aids, not permission to auto-merge changes. The Actions cache is best-effort history, not a permanent database.
 
 The official framework is maintained at https://github.com/google-research/harness2.
