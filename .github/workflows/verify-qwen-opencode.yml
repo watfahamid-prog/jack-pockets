@@ -81,7 +81,7 @@ jobs:
               "messages": [
                   {"role": "system", "content": "Be concise. Do not explain."},
                   {"role": "user", "content": "Reply with exactly: QWEN_OK"},
-                  {"role": "assistant", "content": "<think>\\n\\n</think>\\n\\n"},
+                  {"role": "assistant", "content": "<think>\n\n</think>\n\n"},
               ],
               "stream": False, "think": False,
               "options": {"temperature": 0, "num_predict": 32, "num_ctx": 2048},
