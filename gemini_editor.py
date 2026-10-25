@@ -33,11 +33,6 @@ def _normalize_editorial(data):
 
 
 def refine_beat(beat: dict) -> dict:
-    provider = os.getenv("LLM_PROVIDER", "auto").strip().lower()
-    allow_gemini_with_qwen = os.getenv("JACKPOCKETS_ALLOW_GEMINI_EDITOR_WITH_QWEN", "").strip().lower() in {"1", "true", "yes"}
-    # Selecting local Qwen must not silently spend Gemini API credits in the editor stage.
-    if provider == "qwen" and not allow_gemini_with_qwen:
-        return beat
     if not os.getenv("GEMINI_API_KEY"):
         return beat
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
