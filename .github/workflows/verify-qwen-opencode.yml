@@ -129,6 +129,32 @@ jobs:
           SANDBOX="$RUNNER_TEMP/opencode-sandbox"
           mkdir -p "$SANDBOX"
           cd "$SANDBOX"
+          # Configure the OpenAI-compatible Ollama endpoint explicitly rather than
+          # relying on OpenCode's automatic local-model discovery in CI.
+          cat > opencode.json <<'JSON'
+          {
+            "$schema": "https://opencode.ai/config.json",
+            "provider": {
+              "ollama": {
+                "npm": "@ai-sdk/openai-compatible",
+                "name": "Ollama (local CI)",
+                "options": {
+                  "baseURL": "http://127.0.0.1:11434/v1",
+                  "apiKey": "ollama"
+                },
+                "models": {
+                  "qwen3:4b-instruct": {
+                    "name": "Qwen3 4B Instruct",
+                    "limit": {
+                      "context": 16384,
+                      "output": 4096
+                    }
+                  }
+                }
+              }
+            }
+          }
+          JSON
           opencode --version | tee "$RUNNER_TEMP/opencode-version.log"
           set +e
           timeout 15m opencode run --model ollama/qwen3:4b-instruct "In this empty test workspace, create exactly one file named verification.py. It must define a function add(a, b) returning a+b and include a small main guard that prints add(2, 3). Do not modify files outside this workspace. Then stop." 2>&1 | tee "$RUNNER_TEMP/opencode-run.log"
