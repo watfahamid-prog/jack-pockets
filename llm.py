@@ -266,7 +266,7 @@ def _qwen(topic: str, research: list[dict] | None = None) -> dict:
     from urllib.parse import urlparse
 
     base_url = (os.getenv("QWEN_BASE_URL") or "http://localhost:11434/v1").strip()
-    model = (os.getenv("QWEN_MODEL") or "qwen3:4b").strip()
+    model = (os.getenv("QWEN_MODEL") or "qwen3:4b-instruct").strip()
     timeout = float(os.getenv("QWEN_TIMEOUT_SECONDS", "600"))
     max_tokens = int(os.getenv("QWEN_MAX_TOKENS", "9000"))
     prompt = _research_prompt(topic, research)
@@ -275,13 +275,12 @@ def _qwen(topic: str, research: list[dict] | None = None) -> dict:
 
     for attempt in range(2):
         temperature = 0.4 if attempt == 0 else 0.25
-        # Qwen3 can emit its reasoning as ordinary content on some model templates.
-        # The empty think block is the documented Qwen3 way to force non-thinking mode.
+        # Use the non-thinking instruct model by default. Do not append an assistant
+        # prefill: Ollama's native JSON-mode chat rejects this combination on some
+        # model templates with HTTP 400, and the instruct variant needs no think marker.
         messages = [
             {"role": "system", "content": SYSTEM},
             {"role": "user", "content": prompt},
-            # Qwen3 docs require this as the final assistant message before generation.
-            {"role": "assistant", "content": "<think>\n\n</think>\n\n"},
         ]
         if is_local_ollama:
             # Ollama's native API explicitly supports think=false for Qwen3.
@@ -308,6 +307,17 @@ def _qwen(topic: str, research: list[dict] | None = None) -> dict:
             try:
                 with urllib.request.urlopen(request, timeout=timeout) as response:
                     result = json.loads(response.read().decode("utf-8"))
+            except urllib.error.HTTPError as exc:
+                # Preserve Ollama's response body: the status alone hides actionable
+                # validation errors (for example unsupported chat-template combinations).
+                try:
+                    detail = exc.read().decode("utf-8", errors="replace").strip()
+                except Exception:
+                    detail = ""
+                suffix = f"; response body: {detail[:1200]}" if detail else ""
+                raise RuntimeError(
+                    f"Local Ollama /api/chat request failed: HTTP {exc.code}{suffix}"
+                ) from exc
             except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
                 raise RuntimeError(f"Local Ollama /api/chat request failed: {exc}") from exc
             message = result.get("message") or {}
