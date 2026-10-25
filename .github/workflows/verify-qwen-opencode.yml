@@ -3,6 +3,8 @@ name: Verify Qwen and OpenCode (experimental)
 on:
   push:
     branches: [main, verify-qwen-opencode]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
     inputs:
       topic:
