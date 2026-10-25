@@ -7,6 +7,7 @@ on:
       - ".github/workflows/harness2-free-demo.yml"
       - "harness2/**"
       - "requirements-harness2.txt"
+      - "tests/test_harness2_agent_surfaces.py"
 
 permissions:
   contents: read
@@ -35,11 +36,23 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@v6
 
-      - name: Validate Jack Pockets Harness² manifest
+      - name: Validate manifest and run focused tests
         run: |
           python harness2/validate_harness.py
           python -m unittest discover -s tests -p 'test_harness2_record_run.py' -v
           python -m unittest discover -s tests -p 'test_harness2_propose_improvements.py' -v
+          python -m unittest discover -s tests -p 'test_harness2_agent_surfaces.py' -v
+
+      - name: Render Claude Code and Codex instruction surfaces
+        run: |
+          printf '# Test evidence memory\n\nOverlay passed from CI.\n' > "$RUNNER_TEMP/harness2-memory.md"
+          python harness2/render_native_harness.py --output harness2/native --memory "$RUNNER_TEMP/harness2-memory.md"
+          test -s harness2/native/AGENTS.md
+          test -s harness2/native/CLAUDE.md
+          grep -q "Overlay passed from CI" harness2/native/AGENTS.md
+          grep -q "Overlay passed from CI" harness2/native/CLAUDE.md
+          test -d harness2/native/.agents/skills
+          test -d harness2/native/.claude/skills
 
       - name: Fetch pinned Harness² into an isolated directory
         run: |
@@ -53,27 +66,6 @@ jobs:
         run: |
           uv venv --python 3.12 .venv
           uv pip install --python .venv/bin/python -e '.[render]'
-
-      - name: Test evidence-memory overlay and render native c1-c8 surface
-        run: |
-          printf '# Test evidence memory\\n\\nOverlay passed from CI.\\n' > "$RUNNER_TEMP/harness2-memory.md"
-          python harness2/render_native_harness.py --output harness2/native --memory "$RUNNER_TEMP/harness2-memory.md"
-          grep -q "Overlay passed from CI" harness2/native/LongTermMEMORY.md
-
-      - name: Validate native c1-c8 surface with pinned Harness²
-        working-directory: harness2-upstream
-        run: |
-          ../harness2-upstream/.venv/bin/python - <<'PY'
-          from pathlib import Path
-          from harness2.core.tree import read_tree, validate
-          from harness2.substrate.opencode import OPENCODE_SURFACE, compose_prompt
-
-          root = Path("..") / "harness2" / "native"
-          tree = read_tree(OPENCODE_SURFACE, root)
-          census = validate(OPENCODE_SURFACE, tree, allow_subagents=True)
-          compose_prompt(root)
-          print("Validated Jack Pockets native Harness² surface:", census)
-          PY
 
       - name: Run local demo without model credentials
         working-directory: harness2-upstream

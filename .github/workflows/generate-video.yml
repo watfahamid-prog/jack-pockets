@@ -1,8 +1,6 @@
 name: Generate Jack Pockets Style Documentary
 
 on:
-  push:
-    branches: [full-free-acceptance]
   workflow_dispatch:
     inputs:
       topic:
@@ -22,7 +20,6 @@ jobs:
   generate:
     env:
       DOCUMENTARY_TOPIC: "The 1997 AS 7007 Internet Routing Incident: How One Router Disrupted Internet Traffic"
-      OLLAMA_CONTEXT_LENGTH: "16384"
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -92,42 +89,6 @@ jobs:
           test -f audio_aligner.py
           test -f index.tsx
           test -f JackPocketsVideo.tsx
-
-      - name: Set up local Qwen for free acceptance run
-        if: github.ref == 'refs/heads/full-free-acceptance'
-        shell: bash
-        run: |
-          set -euo pipefail
-          touch "$RUNNER_TEMP/jack-pockets-generate.log"
-          curl -fsSL https://ollama.com/install.sh -o "$RUNNER_TEMP/ollama-install.sh"
-          sh "$RUNNER_TEMP/ollama-install.sh"
-          (ollama serve > "$RUNNER_TEMP/ollama.log" 2>&1 & echo $! > "$RUNNER_TEMP/ollama.pid")
-          for attempt in $(seq 1 60); do
-            if curl --silent --fail http://127.0.0.1:11434/api/tags >/dev/null; then break; fi
-            sleep 2
-          done
-          curl --silent --fail http://127.0.0.1:11434/api/tags
-          timeout 15m ollama pull qwen3:4b
-
-      - name: Generate free 1080p30 documentary with local Qwen
-        if: github.ref == 'refs/heads/full-free-acceptance'
-        env:
-          LLM_PROVIDER: qwen
-          QWEN_BASE_URL: http://127.0.0.1:11434/v1
-          QWEN_MODEL: qwen3:4b
-          QWEN_API_KEY: ollama
-          QWEN_TIMEOUT_SECONDS: "1800"
-          QWEN_MAX_TOKENS: "9000"
-          JACKPOCKETS_DISABLE_CACHE: "1"
-          TTS_PROVIDER: edge
-          TTS_VOICE: en-US-GuyNeural
-          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
-          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
-          JACKPOCKETS_VIDEO_QC: "1"
-          JACKPOCKETS_MAX_TOTAL_ASSET_DOWNLOAD_BYTES: "1000000000"
-        run: |
-          set -o pipefail
-          timeout 90m python generate.py --topic "$DOCUMENTARY_TOPIC" --assets-per-beat 2 2>&1 | tee "$RUNNER_TEMP/jack-pockets-generate.log"
 
       - name: Generate 1080p30 documentary with configured providers
         if: github.event_name == 'workflow_dispatch'
