@@ -1,3 +1,0 @@
-# Minimal dependencies for qwen_smoke_test.py; does not install TTS, Whisper, or video-rendering libraries.
-openai>=1.40.0
-python-dotenv>=1.0.1
