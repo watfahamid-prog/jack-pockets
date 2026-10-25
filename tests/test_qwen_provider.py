@@ -55,6 +55,27 @@ class QwenProviderTests(unittest.TestCase):
         self.assertFalse(payload["think"])
         self.assertFalse(payload["stream"])
         self.assertEqual(payload["options"]["num_ctx"], 16384)
+        self.assertEqual([message["role"] for message in payload["messages"]], ["system", "user"])
+        self.assertNotIn("<think>", payload["messages"][-1]["content"])
+
+    @patch("urllib.request.urlopen")
+    def test_qwen_includes_ollama_http_error_body_in_diagnostic(self, urlopen):
+        import io
+        from urllib.error import HTTPError
+
+        urlopen.side_effect = HTTPError(
+            "http://localhost:11434/api/chat",
+            400,
+            "Bad Request",
+            {},
+            io.BytesIO(b'{"error":"invalid chat template"}'),
+        )
+        with patch.dict("os.environ", {
+            "QWEN_BASE_URL": "http://localhost:11434/v1",
+            "QWEN_MODEL": "qwen3:4b-instruct",
+        }, clear=False):
+            with self.assertRaisesRegex(RuntimeError, "HTTP 400.*invalid chat template"):
+                llm._qwen("Test topic", [{"url": "https://example.com/source", "title": "Source"}])
 
 
 if __name__ == "__main__":
