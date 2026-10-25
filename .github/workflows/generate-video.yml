@@ -22,6 +22,7 @@ jobs:
   generate:
     env:
       DOCUMENTARY_TOPIC: "The 1997 AS 7007 Internet Routing Incident: How One Router Disrupted Internet Traffic"
+      OLLAMA_CONTEXT_LENGTH: "16384"
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -43,7 +44,7 @@ jobs:
           node-version: 20
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
           python-version: "3.11"
           cache: pip
