@@ -1,3 +1,4 @@
+# Qwen verification intentionally uses the non-thinking instruct variant.
 name: Verify Qwen and OpenCode (experimental)
 
 on:
@@ -65,14 +66,48 @@ jobs:
           ollama --version
 
       - name: Download Qwen model
-        run: ollama pull qwen3:4b
+        run: ollama pull qwen3:4b-instruct
+
+      - name: Run cheap Qwen final-text probe
+        env:
+          QWEN_BASE_URL: http://127.0.0.1:11434/v1
+          QWEN_MODEL: qwen3:4b-instruct
+        run: |
+          set -o pipefail
+          python - <<'PY' 2>&1 | tee "$RUNNER_TEMP/qwen-response-probe.log"
+          import json, os, urllib.request
+          base = os.environ["QWEN_BASE_URL"].split("/v1", 1)[0].rstrip("/")
+          payload = {
+              "model": os.environ["QWEN_MODEL"],
+              "messages": [
+                  {"role": "system", "content": "Be concise. Do not explain."},
+                  {"role": "user", "content": "Reply with exactly: QWEN_OK"},
+              ],
+              "stream": False, "think": False,
+              "options": {"temperature": 0, "num_predict": 32, "num_ctx": 2048},
+          }
+          req = urllib.request.Request(base + "/api/chat", data=json.dumps(payload).encode(),
+                                       headers={"Content-Type": "application/json"}, method="POST")
+          with urllib.request.urlopen(req, timeout=180) as response:
+              result = json.loads(response.read().decode())
+          msg = result.get("message") or {}
+          content = msg.get("content") or ""
+          metadata = {key: result.get(key) for key in ("model", "done", "done_reason", "prompt_eval_count", "eval_count")}
+          metadata.update({"content_chars": len(content), "thinking_chars": len(msg.get("thinking") or ""),
+                          "message_keys": sorted(msg.keys())})
+          print("QWEN_PROBE_METADATA=" + json.dumps(metadata, sort_keys=True))
+          print("QWEN_PROBE_CONTENT=" + repr(content[:160]))
+          if content.strip() != "QWEN_OK" or result.get("done_reason") == "length":
+              raise SystemExit("Qwen short probe failed: expected exact final text QWEN_OK without truncation")
+          print("Qwen short probe passed with exact final text.")
+          PY
 
       - name: Run real Qwen documentary-plan smoke test
         id: qwen_smoke
         env:
           LLM_PROVIDER: qwen
           QWEN_BASE_URL: http://127.0.0.1:11434/v1
-          QWEN_MODEL: qwen3:4b
+          QWEN_MODEL: qwen3:4b-instruct
           QWEN_API_KEY: ollama
           QWEN_TIMEOUT_SECONDS: "1800"
           QWEN_MAX_TOKENS: "4000"
@@ -96,7 +131,7 @@ jobs:
           cd "$SANDBOX"
           opencode --version | tee "$RUNNER_TEMP/opencode-version.log"
           set +e
-          timeout 15m opencode run --model ollama/qwen3:4b "In this empty test workspace, create exactly one file named verification.py. It must define a function add(a, b) returning a+b and include a small main guard that prints add(2, 3). Do not modify files outside this workspace. Then stop." 2>&1 | tee "$RUNNER_TEMP/opencode-run.log"
+          timeout 15m opencode run --model ollama/qwen3:4b-instruct "In this empty test workspace, create exactly one file named verification.py. It must define a function add(a, b) returning a+b and include a small main guard that prints add(2, 3). Do not modify files outside this workspace. Then stop." 2>&1 | tee "$RUNNER_TEMP/opencode-run.log"
           OPENCODE_STATUS=${PIPESTATUS[0]}
           set -e
           if [ "$OPENCODE_STATUS" -ne 0 ]; then
@@ -117,6 +152,7 @@ jobs:
           path: |
             out/qwen-smoke-test-plan.json
             ${{ runner.temp }}/qwen-smoke-test.log
+            ${{ runner.temp }}/qwen-response-probe.log
             ${{ runner.temp }}/ollama.log
             ${{ runner.temp }}/opencode-version.log
             ${{ runner.temp }}/opencode-run.log

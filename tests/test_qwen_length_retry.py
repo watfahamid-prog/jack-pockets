@@ -22,14 +22,25 @@ def make_plan(words_per_beat=30):
     return {"title": "Test topic", "beats": beats}
 
 
+def mock_ollama_response(content):
+    response = MagicMock()
+    response.__enter__.return_value.read.return_value = json.dumps({
+        "message": {"content": content, "thinking": ""},
+        "done": True,
+        "done_reason": "stop",
+        "prompt_eval_count": 20,
+        "eval_count": 100,
+    }).encode("utf-8")
+    return response
+
+
 class QwenLengthRetryTests(unittest.TestCase):
-    @patch("openai.OpenAI")
-    def test_qwen_retries_a_short_plan_with_explicit_length_repair_prompt(self, openai_client):
-        short = MagicMock()
-        short.choices[0].message.content = json.dumps(make_plan(words_per_beat=30))
-        long = MagicMock()
-        long.choices[0].message.content = json.dumps(make_plan(words_per_beat=240))
-        openai_client.return_value.chat.completions.create.side_effect = [short, long]
+    @patch("urllib.request.urlopen")
+    def test_qwen_retries_a_short_plan_with_explicit_length_repair_prompt(self, urlopen):
+        urlopen.side_effect = [
+            mock_ollama_response(json.dumps(make_plan(words_per_beat=30))),
+            mock_ollama_response(json.dumps(make_plan(words_per_beat=240))),
+        ]
 
         with patch.dict("os.environ", {
             "QWEN_BASE_URL": "http://localhost:11434/v1",
@@ -43,8 +54,9 @@ class QwenLengthRetryTests(unittest.TestCase):
             sum(len(beat["narration"].split()) for beat in result["beats"]),
             llm.MIN_NARRATION_WORDS,
         )
-        self.assertEqual(openai_client.return_value.chat.completions.create.call_count, 2)
-        retry_prompt = openai_client.return_value.chat.completions.create.call_args_list[1].kwargs["messages"][1]["content"]
+        self.assertEqual(urlopen.call_count, 2)
+        retry_payload = json.loads(urlopen.call_args_list[1].args[0].data.decode("utf-8"))
+        retry_prompt = retry_payload["messages"][1]["content"]
         self.assertIn("LENGTH REPAIR", retry_prompt)
         self.assertIn("1,500 spoken words", retry_prompt)
 
