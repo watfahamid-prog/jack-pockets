@@ -260,33 +260,90 @@ def _anthropic(topic: str, research: list[dict] | None = None) -> dict:
 
 
 def _qwen(topic: str, research: list[dict] | None = None) -> dict:
-    """Use an OpenAI-compatible Qwen endpoint; defaults to local Ollama with no paid fallback."""
-    from openai import OpenAI
+    """Use Qwen through Ollama's native API locally, or an OpenAI-compatible endpoint remotely."""
+    import urllib.error
+    import urllib.request
+    from urllib.parse import urlparse
 
     base_url = (os.getenv("QWEN_BASE_URL") or "http://localhost:11434/v1").strip()
     model = (os.getenv("QWEN_MODEL") or "qwen3:4b").strip()
-    api_key = (os.getenv("QWEN_API_KEY") or "ollama").strip()
-    client = OpenAI(
-        base_url=base_url,
-        api_key=api_key,
-        timeout=float(os.getenv("QWEN_TIMEOUT_SECONDS", "600")),
-        max_retries=0,
-    )
+    timeout = float(os.getenv("QWEN_TIMEOUT_SECONDS", "600"))
+    max_tokens = int(os.getenv("QWEN_MAX_TOKENS", "9000"))
     prompt = _research_prompt(topic, research)
+    parsed = urlparse(base_url)
+    is_local_ollama = parsed.hostname in {"localhost", "127.0.0.1", "::1"} and parsed.port == 11434
+
     for attempt in range(2):
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": SYSTEM},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.4 if attempt == 0 else 0.25,
-            max_tokens=int(os.getenv("QWEN_MAX_TOKENS", "9000")),
-            # Qwen3 may spend the entire token budget in its thinking channel,
-            # leaving message.content empty on Ollama OpenAI-compatible endpoints.
-            extra_body={"think": False},
-        )
-        content = response.choices[0].message.content
+        temperature = 0.4 if attempt == 0 else 0.25
+        messages = [
+            {"role": "system", "content": SYSTEM},
+            {"role": "user", "content": prompt},
+        ]
+        if is_local_ollama:
+            # Ollama's native API explicitly supports think=false for Qwen3.
+            # The OpenAI-compatible endpoint can ignore this extra field on some versions.
+            native_url = f"{parsed.scheme}://{parsed.netloc}/api/chat"
+            payload = {
+                "model": model,
+                "messages": messages,
+                "stream": False,
+                "think": False,
+                "options": {
+                    "temperature": temperature,
+                    "num_predict": max_tokens,
+                    "num_ctx": int(os.getenv("OLLAMA_CONTEXT_LENGTH", "16384")),
+                },
+            }
+            request = urllib.request.Request(
+                native_url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=timeout) as response:
+                    result = json.loads(response.read().decode("utf-8"))
+            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+                raise RuntimeError(f"Local Ollama /api/chat request failed: {exc}") from exc
+            message = result.get("message") or {}
+            content = message.get("content")
+            if not isinstance(content, str) or not content.strip():
+                diagnostic = {
+                    "done": result.get("done"),
+                    "done_reason": result.get("done_reason"),
+                    "prompt_eval_count": result.get("prompt_eval_count"),
+                    "eval_count": result.get("eval_count"),
+                    "thinking_chars": len(str(message.get("thinking") or "")),
+                    "message_keys": sorted(message.keys()),
+                }
+                raise ValueError("Ollama returned empty message.content; response metadata=" + json.dumps(diagnostic))
+        else:
+            from openai import OpenAI
+            client = OpenAI(
+                base_url=base_url,
+                api_key=(os.getenv("QWEN_API_KEY") or "ollama").strip(),
+                timeout=timeout,
+                max_retries=0,
+            )
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                extra_body={"think": False},
+            )
+            choice = response.choices[0]
+            content = choice.message.content
+            if not isinstance(content, str) or not content.strip():
+                diagnostic = {
+                    "finish_reason": choice.finish_reason,
+                    "usage": str(response.usage),
+                    "message_fields": list(choice.message.model_fields_set),
+                    "reasoning_chars": len(str(getattr(choice.message, "reasoning", "") or "")),
+                    "reasoning_content_chars": len(str(getattr(choice.message, "reasoning_content", "") or "")),
+                }
+                raise ValueError("Qwen endpoint returned empty message.content; response metadata=" + json.dumps(diagnostic))
+
         try:
             plan = _normalize_plan(_parse_json(content), topic)
         except ValueError as exc:
@@ -300,16 +357,12 @@ def _qwen(topic: str, research: list[dict] | None = None) -> dict:
                     "do not pad with repeated ideas. Keep at least two specific searchable keywords per beat "
                     "and use only exact source URLs from the supplied research. Output valid JSON only."
                 )
-                print(
-                    f"[llm] Qwen returned a short plan; retrying with explicit length targets: {exc}",
-                    flush=True,
-                )
+                print(f"[llm] Qwen returned a short plan; retrying with explicit length targets: {exc}", flush=True)
                 continue
             raise
         print(f"[llm] Qwen succeeded with model {model} at {base_url}", flush=True)
         return plan
     raise RuntimeError("Qwen failed to produce a valid long-form documentary plan after the length-repair retry")
-
 
 def generate(topic: str, research: list[dict] | None = None) -> dict:
     from cache_utils import load_json_cache, save_json_cache
