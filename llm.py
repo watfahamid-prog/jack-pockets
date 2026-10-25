@@ -259,121 +259,11 @@ def _anthropic(topic: str, research: list[dict] | None = None) -> dict:
 
 
 
-def _qwen(topic: str, research: list[dict] | None = None) -> dict:
-    """Use Qwen through Ollama's native API locally, or an OpenAI-compatible endpoint remotely."""
-    import urllib.error
-    import urllib.request
-    from urllib.parse import urlparse
-
-    base_url = (os.getenv("QWEN_BASE_URL") or "http://localhost:11434/v1").strip()
-    model = (os.getenv("QWEN_MODEL") or "qwen3:4b").strip()
-    timeout = float(os.getenv("QWEN_TIMEOUT_SECONDS", "600"))
-    max_tokens = int(os.getenv("QWEN_MAX_TOKENS", "9000"))
-    prompt = _research_prompt(topic, research)
-    parsed = urlparse(base_url)
-    is_local_ollama = parsed.hostname in {"localhost", "127.0.0.1", "::1"} and parsed.port == 11434
-
-    for attempt in range(2):
-        temperature = 0.4 if attempt == 0 else 0.25
-        # Qwen3 can emit its reasoning as ordinary content on some model templates.
-        # The empty think block is the documented Qwen3 way to force non-thinking mode.
-        messages = [
-            {"role": "system", "content": SYSTEM},
-            {"role": "user", "content": prompt},
-            # Qwen3 docs require this as the final assistant message before generation.
-            {"role": "assistant", "content": "<think>\n\n</think>\n\n"},
-        ]
-        if is_local_ollama:
-            # Ollama's native API explicitly supports think=false for Qwen3.
-            # The OpenAI-compatible endpoint can ignore this extra field on some versions.
-            native_url = f"{parsed.scheme}://{parsed.netloc}/api/chat"
-            payload = {
-                "model": model,
-                "messages": messages,
-                "stream": False,
-                "think": False,
-                "format": "json",
-                "options": {
-                    "temperature": temperature,
-                    "num_predict": max_tokens,
-                    "num_ctx": int(os.getenv("OLLAMA_CONTEXT_LENGTH", "16384")),
-                },
-            }
-            request = urllib.request.Request(
-                native_url,
-                data=json.dumps(payload).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-            try:
-                with urllib.request.urlopen(request, timeout=timeout) as response:
-                    result = json.loads(response.read().decode("utf-8"))
-            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
-                raise RuntimeError(f"Local Ollama /api/chat request failed: {exc}") from exc
-            message = result.get("message") or {}
-            content = message.get("content")
-            if not isinstance(content, str) or not content.strip():
-                diagnostic = {
-                    "done": result.get("done"),
-                    "done_reason": result.get("done_reason"),
-                    "prompt_eval_count": result.get("prompt_eval_count"),
-                    "eval_count": result.get("eval_count"),
-                    "thinking_chars": len(str(message.get("thinking") or "")),
-                    "message_keys": sorted(message.keys()),
-                }
-                raise ValueError("Ollama returned empty message.content; response metadata=" + json.dumps(diagnostic))
-        else:
-            from openai import OpenAI
-            client = OpenAI(
-                base_url=base_url,
-                api_key=(os.getenv("QWEN_API_KEY") or "ollama").strip(),
-                timeout=timeout,
-                max_retries=0,
-            )
-            response = client.chat.completions.create(
-                model=model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                extra_body={"think": False},
-            )
-            choice = response.choices[0]
-            content = choice.message.content
-            if not isinstance(content, str) or not content.strip():
-                diagnostic = {
-                    "finish_reason": choice.finish_reason,
-                    "usage": str(response.usage),
-                    "message_fields": list(choice.message.model_fields_set),
-                    "reasoning_chars": len(str(getattr(choice.message, "reasoning", "") or "")),
-                    "reasoning_content_chars": len(str(getattr(choice.message, "reasoning_content", "") or "")),
-                }
-                raise ValueError("Qwen endpoint returned empty message.content; response metadata=" + json.dumps(diagnostic))
-
-        try:
-            plan = _normalize_plan(_parse_json(content), topic)
-        except ValueError as exc:
-            message = str(exc).lower()
-            too_short = any(marker in message for marker in ("narration words", "usable beats", "need at least 8"))
-            if attempt == 0 and too_short:
-                prompt += (
-                    "\n\nLENGTH REPAIR — the previous plan did not meet the long-form requirements. "
-                    "Return a complete revised JSON plan with 10-12 beats, about 150-190 words of narration "
-                    "per beat, and at least 1,500 spoken words total. Keep the story original and coherent; "
-                    "do not pad with repeated ideas. Keep at least two specific searchable keywords per beat "
-                    "and use only exact source URLs from the supplied research. Output valid JSON only."
-                )
-                print(f"[llm] Qwen returned a short plan; retrying with explicit length targets: {exc}", flush=True)
-                continue
-            raise
-        print(f"[llm] Qwen succeeded with model {model} at {base_url}", flush=True)
-        return plan
-    raise RuntimeError("Qwen failed to produce a valid long-form documentary plan after the length-repair retry")
-
 def generate(topic: str, research: list[dict] | None = None) -> dict:
     from cache_utils import load_json_cache, save_json_cache
 
     provider = os.getenv("LLM_PROVIDER", "auto").lower()
-    order = {"gemini": ["gemini"], "openai": ["openai"], "anthropic": ["anthropic"], "qwen": ["qwen"], "auto": ["gemini", "openai", "anthropic"]}.get(provider, ["gemini", "openai", "anthropic"])
+    order = {"gemini": ["gemini"], "openai": ["openai"], "anthropic": ["anthropic"], "auto": ["gemini", "openai", "anthropic"]}.get(provider, ["gemini", "openai", "anthropic"])
     cache_payload = {
         "topic": topic.strip(),
         "research": research or [],
@@ -382,15 +272,12 @@ def generate(topic: str, research: list[dict] | None = None) -> dict:
             "gemini": bool(os.getenv("GEMINI_API_KEY", "").strip()),
             "openai": bool(os.getenv("OPENAI_API_KEY", "").strip()),
             "anthropic": bool(os.getenv("ANTHROPIC_API_KEY", "").strip()),
-            "qwen": bool(os.getenv("QWEN_API_KEY", "").strip()) or (os.getenv("QWEN_BASE_URL", "http://localhost:11434/v1").startswith(("http://localhost", "http://127.0.0.1"))),
         },
         "models": {
             "gemini": os.getenv("GEMINI_MODEL", "gemini-3.8-flash"),
             "gemini_fallbacks": os.getenv("GEMINI_FALLBACK_MODELS", "gemini-3.6-flash,gemini-3.5-flash-lite"),
             "openai": os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
             "anthropic": os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5-5"),
-            "qwen": os.getenv("QWEN_MODEL", "qwen3:4b"),
-            "qwen_base_url": os.getenv("QWEN_BASE_URL", "http://localhost:11434/v1"),
         },
         "editorial_prompt_version": 4,
     }
@@ -412,8 +299,6 @@ def generate(topic: str, research: list[dict] | None = None) -> dict:
                 plan = _openai(topic, research)
             elif name == "anthropic" and os.getenv("ANTHROPIC_API_KEY"):
                 plan = _anthropic(topic, research)
-            elif name == "qwen":
-                plan = _qwen(topic, research)
             else:
                 continue
             save_json_cache("documentary-plan", cache_payload, plan)
@@ -423,4 +308,4 @@ def generate(topic: str, research: list[dict] | None = None) -> dict:
             print(f"[llm] {name} failed: {exc}", flush=True)
     if attempted:
         raise RuntimeError("No configured LLM produced a valid long-form plan. " + " | ".join(attempted))
-    raise RuntimeError("No LLM provider is configured. Set GEMINI_API_KEY or another supported provider; for local Qwen, set LLM_PROVIDER=qwen and start the configured OpenAI-compatible local server.")
+    raise RuntimeError("No LLM provider is configured. Set GEMINI_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY.")
