@@ -282,6 +282,9 @@ def _qwen(topic: str, research: list[dict] | None = None) -> dict:
             ],
             temperature=0.4 if attempt == 0 else 0.25,
             max_tokens=int(os.getenv("QWEN_MAX_TOKENS", "9000")),
+            # Qwen3 may spend the entire token budget in its thinking channel,
+            # leaving message.content empty on Ollama OpenAI-compatible endpoints.
+            extra_body={"think": False},
         )
         content = response.choices[0].message.content
         try:
