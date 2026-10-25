@@ -21,7 +21,7 @@ concurrency:
 jobs:
   verify-local-ai:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 60
     env:
       OLLAMA_CONTEXT_LENGTH: "16384"
     steps:
@@ -68,10 +68,11 @@ jobs:
           QWEN_BASE_URL: http://127.0.0.1:11434/v1
           QWEN_MODEL: qwen3:4b
           QWEN_API_KEY: ollama
-          QWEN_TIMEOUT_SECONDS: "600"
+          QWEN_TIMEOUT_SECONDS: "900"
+          QWEN_MAX_TOKENS: "4000"
         run: |
           set -o pipefail
-          timeout 25m python qwen_smoke_test.py --topic "${{ inputs.topic || 'What Is the Most Expensive Thing Ever?' }}" --output out/qwen-smoke-test-plan.json 2>&1 | tee "$RUNNER_TEMP/qwen-smoke-test.log"
+          timeout 35m python qwen_smoke_test.py --topic "${{ inputs.topic || 'What Is the Most Expensive Thing Ever?' }}" --output out/qwen-smoke-test-plan.json 2>&1 | tee "$RUNNER_TEMP/qwen-smoke-test.log"
 
       - name: Install OpenCode CLI
         if: always() && steps.ollama_setup.conclusion == 'success'
