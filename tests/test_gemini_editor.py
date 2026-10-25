@@ -6,29 +6,21 @@ import gemini_editor
 
 class GeminiEditorProviderTests(unittest.TestCase):
     @patch("gemini_editor.genai.Client")
-    def test_qwen_mode_skips_gemini_even_when_key_is_configured(self, client):
-        beat = {"title": "Local Qwen beat", "narration": "A test beat.", "keywords": ["local", "test"]}
-
-        with patch.dict("os.environ", {
-            "LLM_PROVIDER": "qwen",
-            "GEMINI_API_KEY": "configured-but-must-not-be-used",
-        }, clear=False):
+    def test_missing_api_key_skips_gemini(self, client):
+        beat = {"title": "Test beat", "narration": "A test beat.", "keywords": ["local", "test"]}
+        with patch.dict("os.environ", {"GEMINI_API_KEY": ""}, clear=False):
             result = gemini_editor.refine_beat(beat)
-
         self.assertIs(result, beat)
         client.assert_not_called()
 
     @patch("gemini_editor.genai.Client")
-    def test_explicit_opt_in_allows_gemini_editor_with_qwen(self, client):
-        beat = {"title": "Opt-in beat", "narration": "A test beat.", "keywords": ["local", "test"]}
-        with patch.dict("os.environ", {
-            "LLM_PROVIDER": "qwen",
-            "GEMINI_API_KEY": "explicit-opt-in-key",
-            "JACKPOCKETS_ALLOW_GEMINI_EDITOR_WITH_QWEN": "1",
-        }, clear=False):
+    def test_configured_api_key_invokes_gemini(self, client):
+        beat = {"title": "Test beat", "narration": "A test beat.", "keywords": ["local", "test"]}
+        client.return_value.models.generate_content.return_value.text = '{"sentences": []}'
+        with patch.dict("os.environ", {"GEMINI_API_KEY": "test-key", "GEMINI_EDITOR_MODEL": "test-model"}, clear=False):
             gemini_editor.refine_beat(beat)
-
-        client.assert_called_once_with(api_key="explicit-opt-in-key")
+        client.assert_called_once_with(api_key="test-key")
+        client.return_value.models.generate_content.assert_called_once()
 
 
 if __name__ == "__main__":
