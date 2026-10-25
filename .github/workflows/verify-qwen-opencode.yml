@@ -72,6 +72,7 @@ jobs:
           QWEN_BASE_URL: http://127.0.0.1:11434/v1
           QWEN_MODEL: qwen3:4b
         run: |
+          set -o pipefail
           python - <<'PY' 2>&1 | tee "$RUNNER_TEMP/qwen-response-probe.log"
           import json, os, urllib.request
           base = os.environ["QWEN_BASE_URL"].split("/v1", 1)[0].rstrip("/")
