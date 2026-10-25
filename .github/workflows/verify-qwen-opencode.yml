@@ -18,7 +18,7 @@ permissions:
 
 concurrency:
   group: qwen-opencode-verification
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   verify-local-ai:
@@ -45,11 +45,15 @@ jobs:
 
       - name: Install Ollama and start local service
         id: ollama_setup
+        timeout-minutes: 5
         shell: bash
         run: |
           set -euo pipefail
           curl -fsSL https://ollama.com/install.sh -o "$RUNNER_TEMP/ollama-install.sh"
-          sh "$RUNNER_TEMP/ollama-install.sh"
+          if ! timeout 240s sh "$RUNNER_TEMP/ollama-install.sh"; then
+            echo "Ollama installation failed or exceeded the 4-minute setup budget." >&2
+            exit 1
+          fi
           (ollama serve > "$RUNNER_TEMP/ollama.log" 2>&1 & echo $! > "$RUNNER_TEMP/ollama.pid")
           for attempt in $(seq 1 60); do
             if curl --silent --fail http://127.0.0.1:11434/api/tags >/dev/null; then
