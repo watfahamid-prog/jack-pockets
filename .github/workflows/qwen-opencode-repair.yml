@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 75
     env:
-      OLLAMA_CONTEXT_LENGTH: "4096"
+      OLLAMA_CONTEXT_LENGTH: "16384"
     steps:
       - name: Check out current main as the repair base
         uses: actions/checkout@v4
