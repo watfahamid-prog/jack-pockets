@@ -47,7 +47,6 @@ jobs:
         run: |
           npm ci
           python -m pip install -r requirements.txt
-          python -m pip install -r requirements-qwen.txt
 
       - name: Install Ollama and start local service
         shell: bash
