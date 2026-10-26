@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 75
     env:
-      OLLAMA_CONTEXT_LENGTH: "16384"
+      OLLAMA_CONTEXT_LENGTH: "4096"
     steps:
       - name: Check out current main as the repair base
         uses: actions/checkout@v4
@@ -61,7 +61,7 @@ jobs:
             sleep 2
           done
           curl --silent --fail http://127.0.0.1:11434/api/tags
-          ollama pull qwen3:4b
+          ollama pull qwen3:4b-instruct
 
       - name: Install OpenCode
         run: npm install --global opencode-ai
@@ -82,8 +82,8 @@ jobs:
                   "baseURL": "http://127.0.0.1:11434/v1"
                 },
                 "models": {
-                  "qwen3:4b": {
-                    "name": "Qwen3 4B"
+                  "qwen3:4b-instruct": {
+                    "name": "Qwen3 4B Instruct"
                   }
                 }
               }
@@ -106,7 +106,7 @@ jobs:
         shell: bash
         env:
           OLLAMA_HOST: http://127.0.0.1:11434
-          REPAIR_TASK: ${{ inputs.task || 'Fix F-23 (unbounded music downloads) and F-8 (captions may never appear). Inspect the actual code first, make the smallest safe fixes, add regression tests, and do not change unrelated files.' }}
+          REPAIR_TASK: ${{ inputs.task || 'Inspect only the preview-versus-production frame-rate mismatch: generate.py sets PROFILES["youtube"] to 30 fps, while config.ts and the Root.tsx demo fallback use 60 fps. Check whether config.ts is imported and whether the Root.tsx fallback affects actual rendering or only the default preview. If the default preview genuinely misrepresents production, change only the relevant preview default to 30 fps and add a focused regression check if practical. If there is no functional impact, write docs/frame-rate-parity-audit.md with file-level evidence instead of inventing a fix. Do not modify production generation settings, AI providers, workflows, dependencies, lockfiles, or unrelated files. This repository uses root-level modules; do not search src/services.' }}
           SUMMARY_PATH: ${{ runner.temp }}/repair-summary.md
         run: |
           set -euo pipefail
@@ -125,7 +125,7 @@ jobs:
             "- Write a concise summary of changed files, root cause/findings, and commands run to: $SUMMARY_PATH" \
             "- If the task is unsafe or cannot be completed, explain why and do not fabricate a fix." \
             > "$RUNNER_TEMP/agent-task.txt"
-          timeout 35m opencode run --print-logs --log-level DEBUG --model ollama/qwen3:4b "$(cat "$RUNNER_TEMP/agent-task.txt")" 2>&1 | tee "$RUNNER_TEMP/opencode-repair.log"
+          timeout 35m opencode run --print-logs --log-level DEBUG --model ollama/qwen3:4b-instruct "$(cat "$RUNNER_TEMP/agent-task.txt")" 2>&1 | tee "$RUNNER_TEMP/opencode-repair.log"
           git diff --check
           if git status --porcelain | grep -E "^[ MARCUD?!]{2} \.github/workflows/|^[ MARCUD?!]{2} requirements[^/]*$"; then
             echo "Agent changed a workflow or dependency manifest; refusing to publish it automatically." >&2
