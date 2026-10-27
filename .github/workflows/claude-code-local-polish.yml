@@ -191,6 +191,79 @@ $failureDetails
           }
 
           $paths = @($status | ForEach-Object { $_.Substring(3).Trim('"') })
+          $notSource = @($paths | Where-Object { $_ -notmatch '\.(py|ts|tsx|js|mjs|jsx|cjs|css|html)
+            $_ -match '^\.github/workflows/' -or
+            $_ -match '^\.github/prompts/' -or
+            $_ -eq 'CLAUDE.md' -or
+            $_ -match '^tests/' -or
+            $_ -eq 'package.json' -or
+            $_ -eq 'package-lock.json' -or
+            $_ -match '^requirements[^/]*\.txt$' -or
+            $_ -eq 'scripts/setup-local-coding-agents.ps1' -or
+            $_ -eq 'docs/claude-codex-ollama-setup.md'
+          })
+          if ($blocked.Count -gt 0) {
+            throw "Refusing to publish agent changes to protected workflow, instruction, test or dependency files: $($blocked -join ', ')"
+          }
+
+          git config user.name "jack-pockets-local-agent"
+          git config user.email "jack-pockets-local-agent@users.noreply.github.com"
+          $branch = "agent/local-ollama-polish-$env:GITHUB_RUN_NUMBER"
+          git checkout -b $branch
+          if ($LASTEXITCODE -ne 0) { throw "Could not create the isolated agent branch." }
+          git add --all
+          git commit -m "chore: verified local Ollama code polish"
+          if ($LASTEXITCODE -ne 0) { throw "Could not commit the verified improvement." }
+          $headSha = (git rev-parse HEAD).Trim()
+          git push origin "HEAD:refs/heads/$branch"
+          if ($LASTEXITCODE -ne 0) { throw "Could not push the agent branch." }
+
+          $headers = @{
+            Authorization = "Bearer $env:GITHUB_TOKEN"
+            Accept = "application/vnd.github+json"
+            "X-GitHub-Api-Version" = "2022-11-28"
+          }
+          $repo = "https://api.github.com/repos/$env:GITHUB_REPOSITORY"
+          $prBody = "Automated local Claude Code + Ollama improvement. Python compilation, Python unit tests, TypeScript typecheck, caption tests and git diff checks passed in workflow run $env:GITHUB_RUN_ID. The agent is prevented from editing its own workflow, prompt, project instructions, tests, dependency manifests and runner setup."
+          $prPayload = @{
+            title = "Verified local Ollama code improvement"
+            head = $branch
+            base = "main"
+            body = $prBody
+          } | ConvertTo-Json
+          $pr = Invoke-RestMethod -Method Post -Uri "$repo/pulls" -Headers $headers -ContentType "application/json" -Body $prPayload
+          Write-Host "Created PR #$($pr.number): $($pr.html_url)"
+
+          try {
+            $mergePayload = @{
+              merge_method = "squash"
+              sha = $headSha
+              commit_title = "chore: verified local Ollama code polish"
+              commit_message = "All required checks passed in local self-hosted runner workflow $env:GITHUB_RUN_ID."
+            } | ConvertTo-Json
+            $merge = Invoke-RestMethod -Method Put -Uri "$repo/pulls/$($pr.number)/merge" -Headers $headers -ContentType "application/json" -Body $mergePayload
+            if (-not $merge.merged) { throw "GitHub did not confirm the merge." }
+            Write-Host "Merged verified PR #$($pr.number) as $($merge.sha)."
+          } catch {
+            Write-Warning "The change passed local checks and PR #$($pr.number) remains open, but repository rules prevented unattended merging: $($_.Exception.Message)"
+            Write-Warning "No unverified changes were forced into main."
+          }
+
+      - name: Upload agent and verification logs
+        if: always() && steps.local_time_gate.outputs.proceed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-ollama-agent-logs-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/claude-code-agent.log
+            ${{ runner.temp }}/jackpockets-checks.log
+          if-no-files-found: ignore
+          retention-days: 14
+ })
+          if ($notSource.Count -gt 0) {
+            throw "Refusing to publish non-source or configuration changes from the local agent: $($notSource -join ', ')"
+          }
+
           $blocked = @($paths | Where-Object {
             $_ -match '^\.github/workflows/' -or
             $_ -match '^\.github/prompts/' -or
