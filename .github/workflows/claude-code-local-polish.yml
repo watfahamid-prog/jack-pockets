@@ -1,9 +1,8 @@
 name: Daily read-only Claude Code audit (Ollama)
 
 on:
-  # Run at 08:00 Stockholm local time in both CET and CEST; a local-time gate skips the other slot.
-  schedule:
-    - cron: "0 6,7 * * *"
+  # Automatic execution is disabled in this public repository.
+  # The scheduled local runner will live only in the private controller repository.
   workflow_dispatch:
 
 permissions:

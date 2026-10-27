@@ -22,7 +22,7 @@ Choose a local model, not one tagged :cloud, if the goal is no hosted-model API 
 
 ## Daily read-only code audit (no daily prompts)
 
-The intended daily audit workflow is .github/workflows/claude-code-local-polish.yml. It is configured as a **read-only review**, not a coding/auto-merge agent. Its report should rate overall system quality and major subsystems from 1 to 10, cite exact code evidence, list gaps in inspection coverage, and propose improvements for later approval. The report is saved as a GitHub Actions summary/artifact, not committed into the repository.
+The file .github/workflows/claude-code-local-polish.yml in this public repository is manual-dispatch only and is not intended to run on a self-hosted runner. Daily scheduling and the local runner will live only in the separate private controller repository. The audit is configured as a **read-only review**, not a coding/auto-merge agent. Its report should rate overall system quality and major subsystems from 1 to 10, cite exact code evidence, list gaps in inspection coverage, and propose improvements for later approval. The report is saved as a GitHub Actions summary/artifact, not committed into the repository.
 
 The workflow connects Claude Code to the local Ollama server with:
 
@@ -34,7 +34,7 @@ Claude Code is invoked in plan/read-only mode with only read/search/list tools a
 
 ### Security requirement before the daily agent can run
 
-**Do not register a self-hosted runner against the public watfahamid-prog/jack-pockets repository.** GitHub warns against using self-hosted runners with public repositories because workflow code may expose the runner's machine. This repository is public, so the local Ollama runner must first be arranged through a separate **private controller repository**. The current workflow is not operational until that secure controller setup is completed and the runner is registered there. Do not use any runner registration token that has previously been pasted into a chat; generate a fresh token from the eventual private controller repository's runner settings when setup is ready, and enter it only in the local setup terminal.
+**Do not register a self-hosted runner against the public watfahamid-prog/jack-pockets repository.** GitHub warns against using self-hosted runners with public repositories because workflow code may expose the runner's machine. This repository is public, so the local Ollama runner must first be arranged through a separate **private controller repository**. The current public-repository workflow must not be connected to the local runner. The daily audit will be operational only after its workflow has been created in the secure private controller repository and the runner is registered there. Do not use any runner registration token that has previously been pasted into a chat; generate a fresh token from the eventual private controller repository's runner settings when setup is ready, and enter it only in the local setup terminal.
 
 A GitHub-hosted runner cannot reach Ollama at 127.0.0.1 on your laptop. For the local model to run daily, the machine hosting Ollama must be on, awake, connected, and have the runner service available at the scheduled time. Keep runner registration tokens and any repository tokens private.
 
