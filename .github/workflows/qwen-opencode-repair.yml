@@ -105,7 +105,7 @@ jobs:
         shell: bash
         env:
           OLLAMA_HOST: http://127.0.0.1:11434
-          REPAIR_TASK: ${{ inputs.task || 'BUG FIX REQUIRED: Align the Remotion preview/default configuration with the actual production YouTube render profile. Actual main-branch evidence: generate.py defines PROFILES["youtube"] with fps=30; config.ts defines profiles.youtube with fps=60; Root.tsx demo manifest uses fps=60. Inspect all usages and tests first. Make the smallest code fix so the YouTube profile and default demo manifest both use 30 fps, unless repository evidence proves one of these values is intentionally different. Add a focused regression test that checks the preview/profile frame-rate parity if practical. Do not write an audit-only document as a substitute for the requested fix. Do not modify workflows, dependencies, lockfiles, production generation settings, AI providers, or unrelated files. Repository modules are at the root; do not search src/services.' }}
+          REPAIR_TASK: ${{ inputs.task || 'Fix FPS mismatch: config.ts and Root.tsx use 60 fps; generate.py production uses 30 fps. Set config.ts and Root.tsx defaults to 30 fps. Add a focused regression test if practical. Do not change workflows, dependencies, lockfiles, AI providers, or unrelated files.' }}
           SUMMARY_PATH: ${{ runner.temp }}/repair-summary.md
         run: |
           set -euo pipefail
