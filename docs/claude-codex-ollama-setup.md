@@ -22,7 +22,7 @@ Choose a local model, not one tagged :cloud, if the goal is no hosted-model API 
 
 ## Daily read-only code audit (no daily prompts)
 
-The intended daily audit workflow is .github/workflows/claude-code-local-polish.yml. It is being changed to be a **read-only review**, not a coding/auto-merge agent. Its report should rate overall system quality and major subsystems from 1 to 10, cite exact code evidence, list gaps in inspection coverage, and propose improvements for later approval. The report is saved as a GitHub Actions summary/artifact, not committed into the repository.
+The intended daily audit workflow is .github/workflows/claude-code-local-polish.yml. It is configured as a **read-only review**, not a coding/auto-merge agent. Its report should rate overall system quality and major subsystems from 1 to 10, cite exact code evidence, list gaps in inspection coverage, and propose improvements for later approval. The report is saved as a GitHub Actions summary/artifact, not committed into the repository.
 
 The workflow connects Claude Code to the local Ollama server with:
 
