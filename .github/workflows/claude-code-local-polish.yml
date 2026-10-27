@@ -19,7 +19,6 @@ jobs:
     runs-on: [self-hosted, Windows, X64, jack-pockets-ollama]
     timeout-minutes: 180
     env:
-      GITHUB_TOKEN: ${{ github.token }}
       GITHUB_REPOSITORY: ${{ github.repository }}
       ANTHROPIC_BASE_URL: http://127.0.0.1:11434
       ANTHROPIC_AUTH_TOKEN: ollama
@@ -42,7 +41,7 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
-          persist-credentials: true
+          persist-credentials: false
 
       - name: Verify local Ollama, selected model, Claude Code and Git Bash
         if: steps.local_time_gate.outputs.proceed == 'true'
@@ -183,6 +182,8 @@ $failureDetails
 
       - name: Publish only a verified source-code patch
         if: steps.local_time_gate.outputs.proceed == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
@@ -216,10 +217,12 @@ $failureDetails
           git add --all
           git diff --cached --check
           if ($LASTEXITCODE -ne 0) { throw "Staged changes failed git diff --check." }
-          git commit -m "chore: verified local Ollama code polish"
+          git -c core.hooksPath=NUL commit -m "chore: verified local Ollama code polish"
           if ($LASTEXITCODE -ne 0) { throw "Could not commit the verified improvement." }
           $headSha = (git rev-parse HEAD).Trim()
-          git push origin "HEAD:refs/heads/$branch"
+          $tokenBytes = [System.Text.Encoding]::UTF8.GetBytes("x-access-token:$env:GITHUB_TOKEN")
+          $basic = [Convert]::ToBase64String($tokenBytes)
+          git -c core.hooksPath=NUL -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $basic" push origin "HEAD:refs/heads/$branch"
           if ($LASTEXITCODE -ne 0) { throw "Could not push the agent branch." }
 
           $headers = @{
