@@ -164,15 +164,15 @@ jobs:
             "Failed checks: $($failures -join ', ')" | Add-Content -Path $checkLog
             if ($attempt -lt 3) {
               $failureDetails = Get-Content $checkLog -Raw
-              $repairPrompt = @"
-The current Jack Pockets patch failed verification. Fix the actual root cause with a narrow change.
-Do not edit tests, dependency manifests, workflow files, prompts, CLAUDE.md or runner setup.
-Do not weaken or delete checks. Do not run documentary generation or call external provider APIs.
-After fixing, stop and let the workflow re-run the checks.
-
-Verification log:
-$failureDetails
-"@
+              $repairPrompt = @(
+                "The current Jack Pockets patch failed verification. Fix the actual root cause with a narrow change."
+                "Do not edit tests, dependency manifests, workflow files, prompts, CLAUDE.md or runner setup."
+                "Do not weaken or delete checks. Do not run documentary generation or call external provider APIs."
+                "After fixing, stop and let the workflow re-run the checks."
+                ""
+                "Verification log:"
+                $failureDetails
+              ) -join "`n"
               & $claudePath -p --model $env:OLLAMA_CODING_MODEL --dangerously-skip-permissions --max-turns 16 $repairPrompt 2>&1 | Tee-Object -FilePath $agentLog -Append
               $agentExitCode = $LASTEXITCODE
               if ($agentExitCode -ne 0) { throw "Claude Code repair pass failed with exit code $agentExitCode." }
