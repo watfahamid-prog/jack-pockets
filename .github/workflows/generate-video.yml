@@ -22,6 +22,8 @@ concurrency:
 jobs:
   generate:
     if: github.event_name != 'schedule' || vars.DAILY_VIDEO_AUTOMATION_ENABLED == 'true'
+    env:
+      DOCUMENTARY_TOPIC: "The 1997 AS 7007 Internet Routing Incident: How One Router Disrupted Internet Traffic"
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
