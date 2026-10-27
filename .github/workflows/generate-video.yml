@@ -1,9 +1,7 @@
 name: Generate Jack Pockets Style Documentary
 
 on:
-  # Scheduled video runs are gated to avoid unexpected provider/API charges.
-  schedule:
-    - cron: "0 10 * * *"
+  # Documentary generation is manual-only until the user approves the final quality gate.
   workflow_dispatch:
     inputs:
       topic:
@@ -21,7 +19,6 @@ concurrency:
 
 jobs:
   generate:
-    if: github.event_name != 'schedule' || vars.DAILY_VIDEO_AUTOMATION_ENABLED == 'true'
     env:
       DOCUMENTARY_TOPIC: "The 1997 AS 7007 Internet Routing Incident: How One Router Disrupted Internet Traffic"
     runs-on: ubuntu-latest
@@ -32,26 +29,11 @@ jobs:
       - name: Initialize run log
         run: touch "$RUNNER_TEMP/jack-pockets-generate.log"
 
-      - name: Choose rotating topic for scheduled video
-        if: github.event_name == 'schedule'
-        shell: bash
-        run: |
-          mapfile -t topics < <(grep -vE '^[[:space:]]*(#|$)' topics/auto_topics.txt)
-          if [ "${#topics[@]}" -eq 0 ]; then
-            echo "topics/auto_topics.txt contains no topics." >&2
-            exit 1
-          fi
-          day_number="$(date -u +%j)"
-          index=$(( (10#$day_number - 1) % ${#topics[@]} ))
-          echo "DOCUMENTARY_TOPIC=${topics[$index]}" >> "$GITHUB_ENV"
-          echo "Scheduled documentary topic: ${topics[$index]}"
-
       - name: Set requested topic for manual run
         if: github.event_name == 'workflow_dispatch'
         env:
           INPUT_TOPIC: ${{ inputs.topic }}
         run: echo "DOCUMENTARY_TOPIC=$INPUT_TOPIC" >> "$GITHUB_ENV"
-
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -152,8 +134,6 @@ jobs:
             --output harness2-learning-proposals.json
           python harness2/render_native_harness.py --output harness2/native --memory harness2-learning-memory.md
 
-      # Save useful research/plan/audio cache entries even when the quality gate
-      # rejects a run. Otherwise failed generation attempts never persist cache data.
       - name: Save reusable research, plans, and narration
         if: always()
         uses: actions/cache/save@v4
