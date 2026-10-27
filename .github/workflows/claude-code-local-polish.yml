@@ -222,7 +222,7 @@ $failureDetails
           $headSha = (git rev-parse HEAD).Trim()
           $tokenBytes = [System.Text.Encoding]::UTF8.GetBytes("x-access-token:$env:GITHUB_TOKEN")
           $basic = [Convert]::ToBase64String($tokenBytes)
-          git -c core.hooksPath=NUL -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $basic" push origin "HEAD:refs/heads/$branch"
+          git -c core.hooksPath=NUL -c "http.extraheader=AUTHORIZATION: basic $basic" push origin "HEAD:refs/heads/$branch"
           if ($LASTEXITCODE -ne 0) { throw "Could not push the agent branch." }
 
           $headers = @{
