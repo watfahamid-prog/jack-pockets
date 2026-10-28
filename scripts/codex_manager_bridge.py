@@ -598,9 +598,21 @@ def main() -> int:
         default=str(Path(__file__).resolve().parent.parent),
         help="Path to the local Jack Pockets Git checkout.",
     )
+    parser.add_argument(
+        "--enable-deprecated-cli-bridge",
+        action="store_true",
+        help="Explicit opt-in to the dormant legacy CLI bridge; not needed for Codex Desktop.",
+    )
     parser.add_argument("--watch", action="store_true", help="Poll the task queue every 60 seconds.")
     parser.add_argument("--interval-seconds", type=int, default=60, help="Polling interval; minimum is 30 seconds.")
     args = parser.parse_args()
+    if not args.enable_deprecated_cli_bridge:
+        print(
+            "The legacy Codex CLI bridge is dormant and disabled by default. Use Codex Desktop. "
+            "Only pass --enable-deprecated-cli-bridge if the user explicitly reauthorizes this legacy workflow.",
+            file=sys.stderr,
+        )
+        return 2
 
     bridge = CodexManagerBridge(Path(args.repo_path), poll_interval=args.interval_seconds)
     try:
