@@ -210,7 +210,7 @@ def scrub_public_text(text: str, known_secret_values: list[str] | None = None) -
     for pattern in SECRET_PATTERNS:
         result = pattern.sub("[REDACTED_SECRET_PATTERN]", result)
     result = re.sub(
-        r"(?i)\b[\w]*(?:api[_ -]?key|access[_ -]?token|secret|password|credential)[\w]*\s*[:=]\s*['\"]?[^\s'\"]{8,}",
+        r"(?i)\b([\w]*(?:api[_ -]?key|access[_ -]?token|secret|password|credential)[\w]*)\s*[:=]\s*['\"]?[^\s'\"]{8,}",
         r"\1=[REDACTED]",
         result,
     )
