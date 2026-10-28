@@ -74,6 +74,31 @@ class CodexManagerBridgeContractTests(unittest.TestCase):
         with self.assertRaises(bridge.BridgeError):
             bridge.paths_to_stage([("??", ".env.production")])
 
+    def test_generated_media_and_cache_artifacts_cannot_be_staged(self):
+        for path in (
+            "out/final.mp4",
+            "downloads/archive.zip",
+            "models/weights.onnx",
+            "node_modules/some-package/index.js",
+            "cache/run.log",
+            "__pycache__/module.pyc",
+        ):
+            with self.subTest(path=path):
+                self.assertTrue(bridge.is_disallowed_artifact_path(path))
+                with self.assertRaises(bridge.BridgeError):
+                    bridge.paths_to_stage([("??", path)])
+
+    def test_public_summary_scrubs_tokens_and_windows_paths(self):
+        source = (
+            "failed at C:\\\\Users\\\\asus\\\\Projects\\\\jack-pockets\\\\out\\\\clip.mp4 "
+            "with ghp_ABCDEFGHIJKLMNOPQRSTUVWX and api_key=very-secret-token-value"
+        )
+        redacted = bridge.scrub_public_text(source)
+        self.assertNotIn("ghp_ABCDEFGHIJKLMNOPQRSTUVWX", redacted)
+        self.assertNotIn("very-secret-token-value", redacted)
+        self.assertNotIn("C:\\\\Users\\\\asus", redacted)
+        self.assertIn("[REDACTED", redacted)
+
 
 if __name__ == "__main__":
     unittest.main()
