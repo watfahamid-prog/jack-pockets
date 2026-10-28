@@ -1,3 +1,15 @@
+param(
+    [switch]$EnableDeprecatedCliBridge
+)
+
+if (!$EnableDeprecatedCliBridge) {
+    Write-Host "The legacy Codex CLI bridge is dormant and disabled by default." -ForegroundColor Yellow
+    Write-Host "Use the ChatGPT desktop app's Codex view for the active workflow."
+    Write-Host "No installation or sign-in was started."
+    Write-Host "Only rerun with -EnableDeprecatedCliBridge if you explicitly decide to reactivate the legacy CLI bridge."
+    exit 2
+}
+
 $ErrorActionPreference = "Stop"
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
@@ -84,9 +96,9 @@ $python = Get-Command python -ErrorAction SilentlyContinue
 if (!$python) {
     $py = Get-Command py.exe -ErrorAction SilentlyContinue
     if (!$py) { throw "Python 3 is required for the bridge. Install Python 3.11+, reopen PowerShell, then rerun setup." }
-    $pythonArgs = @("-3", (Join-Path $repoRoot "scripts\codex_manager_bridge.py"), "--watch", "--repo-path", $repoRoot)
+    $pythonArgs = @("-3", (Join-Path $repoRoot "scripts\codex_manager_bridge.py"), "--enable-deprecated-cli-bridge", "--watch", "--repo-path", $repoRoot)
 } else {
-    $pythonArgs = @((Join-Path $repoRoot "scripts\codex_manager_bridge.py"), "--watch", "--repo-path", $repoRoot)
+    $pythonArgs = @((Join-Path $repoRoot "scripts\codex_manager_bridge.py"), "--enable-deprecated-cli-bridge", "--watch", "--repo-path", $repoRoot)
 }
 
 Write-Host ""

@@ -88,3 +88,14 @@ End each implementation task with:
 - branch and PR link, if created.
 
 Keep it honest and brief. The measure of success is a safer, more reliable system supported by evidence—not the amount of code changed.
+
+
+## 9. Team role: independent review of Codex changes
+
+The shared team protocol is in docs/ai-coding-team-workflow.md.
+
+- When asked to review a Codex-authored pull request, default to **read-only independent review**. Use a separate checkout/worktree at the PR head; never edit the same worktree while Codex is implementing.
+- Inspect the full diff, affected callers, tests, failure paths and cost/provenance effects. Report only actionable findings supported by evidence, with severity, exact file/line and reproduction or rationale. Label uncertainty and pre-existing issues.
+- Do not change files, commit, push, or merge during an independent review. If separately asked to implement a finding, work on a distinct branch/worktree and submit a separate PR.
+- Use Claude Code only with existing authorized access. Do not install it, invoke paid hosted code-review features, use API keys, buy credits, or trigger additional paid usage without explicit user authorization. If the available access or cost is unclear, stop and report the limitation.
+- Never claim a test passed or a video was inspected without actual output/artifact evidence.

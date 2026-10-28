@@ -1,3 +1,5 @@
+> **Status: dormant / not the active team workflow.** The user reported poor results from the Codex CLI test and has chosen to use Codex Desktop first. The setup script and Python runner now stop by default unless explicitly opted in. Do not opt in or reactivate this bridge unless the user explicitly authorizes it again. Use docs/ai-coding-team-workflow.md for the current manual desktop workflow.
+
 # ChatGPT-to-Codex local task bridge
 
 ## What this does
@@ -29,9 +31,9 @@ ChatGPT should create a task issue only for explicit coding requests—not for o
 
 From the local Jack Pockets repository, run:
 
-    powershell -ExecutionPolicy Bypass -File .\scripts\setup-codex-manager-bridge.ps1
+    powershell -ExecutionPolicy Bypass -File .\scripts\setup-codex-manager-bridge.ps1 -EnableDeprecatedCliBridge
 
-The setup script installs the official Codex CLI package if missing, and installs GitHub CLI through winget if missing. It then guides the user through:
+The setup script exits without installing or launching anything unless the explicit -EnableDeprecatedCliBridge switch is supplied. This opt-in exists only for a future user-authorized reactivation of the legacy bridge. After opt-in, the setup script installs the official Codex CLI package if missing, and installs GitHub CLI through winget if missing. It then guides the user through:
 1. GitHub CLI browser login using the GitHub account that can push to this repository.
 2. Codex CLI sign-in using the user's ChatGPT account (not an OpenAI API key).
 3. Starting the poller.
@@ -40,7 +42,7 @@ The setup script does not create or store a personal access token, touch model s
 
 To check the queue once without keeping a poller running:
 
-    python .\scripts\codex_manager_bridge.py --repo-path .
+    python .\scripts\codex_manager_bridge.py --enable-deprecated-cli-bridge --repo-path .
 
 The watch mode polls every 60 seconds. Keep the PowerShell window open and the computer awake for tasks to be processed.
 
