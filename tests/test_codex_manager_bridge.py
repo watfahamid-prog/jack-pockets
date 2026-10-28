@@ -1,7 +1,10 @@
+import contextlib
+import io
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
@@ -61,6 +64,14 @@ class CodexManagerBridgeContractTests(unittest.TestCase):
                 ["git", "-C", str(repo), "worktree", "remove", "--force", str(task_path)],
                 check=True, capture_output=True, text=True,
             )
+
+    def test_cli_bridge_is_disabled_without_explicit_opt_in(self):
+        with patch.object(sys, "argv", ["codex_manager_bridge.py"]):
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                self.assertEqual(bridge.main(), 2)
+        self.assertIn("disabled by default", stderr.getvalue())
+        self.assertIn("Codex Desktop", stderr.getvalue())
 
     def test_accepts_only_marked_owner_authored_task(self):
         self.assertTrue(bridge.issue_is_eligible(self.make_issue()))
