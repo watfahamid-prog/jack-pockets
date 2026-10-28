@@ -1,4 +1,6 @@
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -18,6 +20,47 @@ class CodexManagerBridgeContractTests(unittest.TestCase):
         }
         issue.update(overrides)
         return issue
+
+    def test_isolated_worktree_keeps_original_checkout_and_untracked_file_safe(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repo = root / "repo"
+            task_path = root / "bridge" / "worktrees" / "issue-123"
+            repo.mkdir()
+            subprocess.run(
+                ["git", "init", "--initial-branch=main", str(repo)],
+                check=True, capture_output=True, text=True,
+            )
+            subprocess.run(["git", "-C", str(repo), "config", "user.name", "Bridge Test"], check=True)
+            subprocess.run(["git", "-C", str(repo), "config", "user.email", "bridge-test@example.invalid"], check=True)
+            (repo / "README.md").write_text("tracked baseline\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(repo), "add", "README.md"], check=True)
+            subprocess.run(["git", "-C", str(repo), "commit", "-m", "initial"], check=True, capture_output=True)
+            subprocess.run(
+                ["git", "-C", str(repo), "update-ref", "refs/remotes/origin/main", "HEAD"],
+                check=True,
+            )
+            scratch = repo / "local_agent_test.py"
+            scratch.write_text("keep this local\n", encoding="utf-8")
+
+            bridge.create_isolated_worktree(repo, "codex/test-issue-123", task_path)
+
+            branch = subprocess.run(
+                ["git", "-C", str(repo), "branch", "--show-current"],
+                check=True, capture_output=True, text=True,
+            ).stdout.strip()
+            task_branch = subprocess.run(
+                ["git", "-C", str(task_path), "branch", "--show-current"],
+                check=True, capture_output=True, text=True,
+            ).stdout.strip()
+            self.assertEqual(branch, "main")
+            self.assertEqual(task_branch, "codex/test-issue-123")
+            self.assertEqual(scratch.read_text(encoding="utf-8"), "keep this local\n")
+            self.assertFalse((task_path / "local_agent_test.py").exists())
+            subprocess.run(
+                ["git", "-C", str(repo), "worktree", "remove", "--force", str(task_path)],
+                check=True, capture_output=True, text=True,
+            )
 
     def test_accepts_only_marked_owner_authored_task(self):
         self.assertTrue(bridge.issue_is_eligible(self.make_issue()))
