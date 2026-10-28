@@ -230,6 +230,21 @@ def sha256_file(path: Path) -> str | None:
     return digest.hexdigest()
 
 
+def create_isolated_worktree(repo_path: Path, branch: str, worktree_path: Path) -> None:
+    """Create a task worktree from origin/main without switching the user's checkout."""
+    if worktree_path.exists():
+        raise BridgeError(f"Refusing to overwrite an existing task worktree path: {worktree_path}")
+    worktree_path.parent.mkdir(parents=True, exist_ok=True)
+    result = run_command(
+        [
+            "git", "-C", str(repo_path), "worktree", "add", "-b", branch,
+            str(worktree_path), "origin/main",
+        ],
+        timeout=180,
+    )
+    require_success(result, "Creating isolated Codex worktree")
+
+
 class CodexManagerBridge:
     def __init__(self, repo_path: Path, *, poll_interval: int = 60) -> None:
         self.repo_path = repo_path.resolve()
@@ -352,41 +367,63 @@ class CodexManagerBridge:
         branch = f"codex/manager-issue-{number}"
         started = False
         branch_created = False
+        task_path: Path | None = None
         original_file_hash: str | None = None
         issue_url = str(issue.get("html_url", ""))
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         log_path = self.log_dir / f"issue-{number}-{stamp}.jsonl"
         stderr_path = log_path.with_suffix(".stderr.txt")
         final_path = log_path.with_suffix(".final.txt")
+        task_path = self.bridge_home / "worktrees" / f"issue-{number}-{stamp}"
+
+        def task_git(*args: str, timeout: int = 120) -> str:
+            result = run_command(["git", "-C", str(task_path), *args], timeout=timeout)
+            return require_success(result, "git " + " ".join(args))
+
+        def task_status_entries() -> list[tuple[str, str]]:
+            return parse_porcelain_z(
+                task_git("status", "--porcelain=v1", "--untracked-files=all", "--no-renames", "-z")
+            )
+
+        def remove_task_worktree() -> None:
+            nonlocal task_path
+            if task_path is not None and task_path.exists():
+                require_success(
+                    run_command(
+                        ["git", "-C", str(self.repo_path), "worktree", "remove", "--force", str(task_path)],
+                        timeout=120,
+                    ),
+                    "Removing completed isolated task worktree",
+                )
+                task_path = None
 
         try:
             self.verify_repository()
             original_file_hash = self.assert_safe_worktree()
             self.sync_main_fast_forward_only(original_file_hash)
-            entries_after_pull = self.get_status_entries()
             unexpected = [
-                (status, path) for status, path in entries_after_pull
+                (status, path) for status, path in self.get_status_entries()
                 if not (status == "??" and path in PRESERVED_UNTRACKED)
             ]
             if unexpected:
-                raise BridgeError("Worktree is not clean after fast-forward update; no task code was run.")
+                raise BridgeError("Main checkout is not clean after fast-forward update; no task code was run.")
 
             existing = run_command(
                 ["git", "-C", str(self.repo_path), "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"]
             )
             if existing.returncode == 0:
                 raise BridgeError(f"Branch {branch} already exists; refusing to overwrite a previous attempt.")
+            if task_path.exists():
+                raise BridgeError(f"Task worktree path already exists; refusing to overwrite it: {task_path}")
 
             prompt = task_instructions(issue)
-            require_success(
-                run_command(["git", "-C", str(self.repo_path), "switch", "-c", branch], timeout=60),
-                "Creating isolated Codex task branch",
-            )
+            create_isolated_worktree(self.repo_path, branch, task_path)
             branch_created = True
-            self.comment(number, "started", f"Codex bridge started task on branch {branch}.\n\nIssue: {issue_url}")
+            if self.git("branch", "--show-current") != "main":
+                raise BridgeError("Safety check failed: creating the task worktree changed the main checkout branch.")
+            self.comment(number, "started", f"Codex started isolated worktree {branch}.\n\nIssue: {issue_url}")
             started = True
 
-            # Codex must authenticate through the ChatGPT plan; API-key variables are not inherited.
             child_env = os.environ.copy()
             known_secret_values = [
                 value for key, value in child_env.items()
@@ -396,8 +433,7 @@ class CodexManagerBridge:
                 ))
             ]
             for key in list(child_env):
-                upper = key.upper()
-                if any(token in upper for token in (
+                if any(token in key.upper() for token in (
                     "API_KEY", "ACCESS_TOKEN", "AUTH_TOKEN", "SECRET", "PASSWORD",
                     "CREDENTIAL", "GITHUB_TOKEN", "GH_TOKEN", "NPM_TOKEN", "PYPI_TOKEN",
                 )):
@@ -407,7 +443,7 @@ class CodexManagerBridge:
                 "codex", "exec", "--json",
                 "--sandbox", "workspace-write",
                 "--ask-for-approval", "never",
-                "--cd", str(self.repo_path),
+                "--cd", str(task_path),
                 "--output-last-message", str(final_path),
                 "-",
             ]
@@ -417,7 +453,7 @@ class CodexManagerBridge:
                 try:
                     completed = subprocess.run(
                         command,
-                        cwd=str(self.repo_path),
+                        cwd=str(task_path),
                         input=prompt,
                         text=True,
                         encoding="utf-8",
@@ -430,9 +466,9 @@ class CodexManagerBridge:
                         env=child_env,
                     )
                 except subprocess.TimeoutExpired:
-                    raise BridgeError("Codex exceeded the one-hour task limit; branch and files were left for review.")
+                    raise BridgeError("Codex exceeded the one-hour limit; isolated worktree retained for review.")
             if completed.returncode != 0:
-                raise BridgeError(f"Codex exited with code {completed.returncode}; branch and any edits were left for review.")
+                raise BridgeError(f"Codex exited with code {completed.returncode}; isolated worktree retained for review.")
 
             final_message = final_path.read_text(encoding="utf-8", errors="replace").strip() if final_path.exists() else ""
             if not final_message:
@@ -442,45 +478,34 @@ class CodexManagerBridge:
             final_message = scrub_public_text(final_message, known_secret_values)
 
             if sha256_file(self.repo_path / "local_agent_test.py") != original_file_hash:
-                raise BridgeError("local_agent_test.py changed during the task. It was not staged or committed; inspect the local file and branch manually.")
+                raise BridgeError("local_agent_test.py changed in the original checkout; it was not staged or committed.")
+            if (task_path / "local_agent_test.py").exists():
+                raise BridgeError("Codex created protected local_agent_test.py inside its worktree; worktree retained for review.")
+            if self.git("branch", "--show-current") != "main":
+                raise BridgeError("Original checkout is no longer on main; refusing to stage or publish.")
 
-            diff_check = run_command(["git", "-C", str(self.repo_path), "diff", "--check"], timeout=60)
-            require_success(diff_check, "git diff --check")
-
-            changed_paths = paths_to_stage(self.get_status_entries())
+            require_success(
+                run_command(["git", "-C", str(task_path), "diff", "--check"], timeout=60),
+                "Task worktree git diff --check",
+            )
+            changed_paths = paths_to_stage(task_status_entries())
             if not changed_paths:
-                self.comment(
-                    number, "completed",
-                    "Codex finished without producing repository changes.\n\n"
-                    + final_message
-                    + "\n\nDetailed execution logs remain on the local computer and were not attached here."
-                )
-                require_success(run_command(["git", "-C", str(self.repo_path), "switch", "main"], timeout=60), "Returning to main")
+                remove_task_worktree()
+                self.comment(number, "completed", "Codex finished without repository changes.\n\n" + final_message)
+                print(f"Task #{number} finished with no code changes.")
                 return
 
-            require_success(
-                run_command(["git", "-C", str(self.repo_path), "add", "--", *changed_paths], timeout=120),
-                "Staging Codex changes",
-            )
-            require_success(run_command(["git", "-C", str(self.repo_path), "diff", "--cached", "--check"], timeout=60), "Staged diff check")
-            staged = self.git("diff", "--cached", "--name-only")
+            task_git("add", "--", *changed_paths, timeout=120)
+            task_git("diff", "--cached", "--check", timeout=60)
+            staged = task_git("diff", "--cached", "--name-only")
             if not staged.strip():
+                remove_task_worktree()
                 self.comment(number, "completed", "Codex finished without staged source changes.\n\n" + final_message)
-                require_success(run_command(["git", "-C", str(self.repo_path), "switch", "main"], timeout=60), "Returning to main")
                 return
 
-            require_success(
-                run_command(
-                    ["git", "-C", str(self.repo_path), "commit", "-m", f"fix: address manager task #{number}"],
-                    timeout=180,
-                ),
-                "Committing Codex changes",
-            )
-            commit_sha = self.git("rev-parse", "HEAD")
-            require_success(
-                run_command(["git", "-C", str(self.repo_path), "push", "-u", "origin", branch], timeout=300),
-                "Pushing feature branch",
-            )
+            task_git("commit", "-m", f"fix: address manager task #{number}", timeout=180)
+            commit_sha = task_git("rev-parse", "HEAD")
+            task_git("push", "-u", "origin", branch, timeout=300)
 
             short_title = title[len(TASK_PREFIX):].strip()
             pr_title = f"[Codex] #{number}: {short_title}"
@@ -492,13 +517,15 @@ class CodexManagerBridge:
                 "## Codex report\n"
                 f"{final_message}\n\n"
                 "## Bridge validation\n"
-                "- Agent was run with the workspace-write sandbox; main was not edited.\n"
+                "- Codex ran in a dedicated Git worktree separate from the user's original checkout.\n"
+                "- The original checkout remained on main and its untracked local_agent_test.py was protected.\n"
                 "- Host-side git diff --check and staged diff check passed.\n"
                 "- This is a draft PR; review the code and CI before merging.\n"
                 "- No video was generated and no paid provider APIs were intentionally called.\n"
             )
             body_file = self.log_dir / f"issue-{number}-pr-body.md"
             body_file.write_text(pr_body, encoding="utf-8")
+            remove_task_worktree()
             pr_result = run_command(
                 [
                     "gh", "pr", "create", "--draft", "--repo", REPOSITORY,
@@ -509,7 +536,7 @@ class CodexManagerBridge:
                 timeout=180,
             )
             if pr_result.returncode != 0:
-                raise BridgeError(f"Branch {branch} was pushed at commit {commit_sha}, but draft PR creation failed. No merge was attempted.")
+                raise BridgeError(f"Branch {branch} was pushed at {commit_sha}, but draft PR creation failed; no merge attempted.")
             pr_url = pr_result.stdout.strip().splitlines()[-1] if pr_result.stdout.strip() else "(PR URL not returned)"
             self.comment(
                 number, "completed",
@@ -517,7 +544,8 @@ class CodexManagerBridge:
                 f"- PR: {pr_url}\n- Branch: {branch}\n- Commit: {commit_sha}\n- Issue: {issue_url}\n\n"
                 "### Codex report\n" + final_message
             )
-            require_success(run_command(["git", "-C", str(self.repo_path), "switch", "main"], timeout=60), "Returning to main")
+            if self.git("branch", "--show-current") != "main":
+                raise BridgeError("Final safety check failed: original checkout branch changed unexpectedly.")
             print(f"Completed issue #{number}; draft PR: {pr_url}")
         except Exception as exc:
             status = "failed" if started else "blocked"
@@ -526,14 +554,17 @@ class CodexManagerBridge:
                     number, status,
                     scrub_public_text(f"Codex bridge stopped safely: {str(exc)}") + "\n\n"
                     + (f"Branch retained for inspection: {branch}.\n" if branch_created else "")
-                    + "No merge was performed. Review the local Git status before trying another task."
+                    + "No merge was performed. Review local Git status before retrying."
                 )
             except Exception:
                 pass
             print(f"STOPPED on issue #{number}: {exc}", file=sys.stderr)
             if branch_created:
-                print(f"Preserved working branch: {branch}", file=sys.stderr)
+                print(f"Preserved task branch: {branch}", file=sys.stderr)
+                if task_path is not None:
+                    print(f"Preserved isolated worktree: {task_path}", file=sys.stderr)
             raise BridgeError(f"Task #{number} stopped; inspect repository state before resuming.") from exc
+
 
     def run_once(self) -> bool:
         self.check_tools_and_auth()
