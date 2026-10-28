@@ -3,6 +3,14 @@ $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $repoRoot
 
+# Keep automation authentication/config separate from any existing desktop Codex profile.
+$bridgeHome = Join-Path $env:LOCALAPPDATA "JackPocketsCodexBridge"
+$env:CODEX_HOME = Join-Path $bridgeHome "codex-home"
+New-Item -ItemType Directory -Force -Path $env:CODEX_HOME | Out-Null
+
+# Ensure a previously configured API key is not used for this ChatGPT-plan bridge.
+Remove-Item Env:OPENAI_API_KEY -ErrorAction SilentlyContinue
+
 Write-Host "Jack Pockets ChatGPT-to-Codex bridge setup" -ForegroundColor Cyan
 Write-Host "Repository: $repoRoot"
 Write-Host "This setup uses Codex signed in with your ChatGPT account; it does not configure an API key."
