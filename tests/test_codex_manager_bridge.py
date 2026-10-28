@@ -90,13 +90,13 @@ class CodexManagerBridgeContractTests(unittest.TestCase):
 
     def test_public_summary_scrubs_tokens_and_windows_paths(self):
         source = (
-            "failed at C:\\\\Users\\\\asus\\\\Projects\\\\jack-pockets\\\\out\\\\clip.mp4 "
+            r"failed at C:\Users\asus\Projects\jack-pockets\out\clip.mp4 "
             "with ghp_ABCDEFGHIJKLMNOPQRSTUVWX and api_key=very-secret-token-value"
         )
         redacted = bridge.scrub_public_text(source)
         self.assertNotIn("ghp_ABCDEFGHIJKLMNOPQRSTUVWX", redacted)
         self.assertNotIn("very-secret-token-value", redacted)
-        self.assertNotIn("C:\\\\Users\\\\asus", redacted)
+        self.assertNotIn(r"C:\Users\asus", redacted)
         self.assertIn("[REDACTED", redacted)
 
 
