@@ -40,9 +40,19 @@ class CodexManagerBridgeContractTests(unittest.TestCase):
         self.assertFalse(bridge.issue_is_eligible(self.make_issue(body=long_body)))
 
     def test_processed_marker_stops_repeated_execution(self):
-        comments = [{"body": "started <!-- codex-manager-bridge: started -->"}]
+        comments = [{
+            "user": {"login": "watfahamid-prog"},
+            "body": "started <!-- codex-manager-bridge: started -->",
+        }]
         self.assertTrue(bridge.issue_is_processed(comments))
         self.assertFalse(bridge.issue_is_processed([{"body": "ordinary comment"}]))
+
+    def test_other_users_cannot_spoof_processed_marker(self):
+        comments = [{
+            "user": {"login": "someone-else"},
+            "body": "<!-- codex-manager-bridge: completed -->",
+        }]
+        self.assertFalse(bridge.issue_is_processed(comments))
 
     def test_porcelain_parser_preserves_paths(self):
         output = "?? local_agent_test.py\0 M assets.py\0A  tests/test_new_case.py\0"
@@ -63,7 +73,7 @@ class CodexManagerBridgeContractTests(unittest.TestCase):
         )
 
     def test_sensitive_paths_are_rejected(self):
-        for path in (".env", ".env.production", "secrets/token.txt", "credentials.json", "client.pem", ".npmrc"):
+        for path in (".env", ".env.production", "production.env", "secrets/token.txt", "credentials.json", "client.pem", ".npmrc"):
             with self.subTest(path=path):
                 self.assertTrue(bridge.is_sensitive_path(path))
         for path in (".env.example", "assets.py", "tests/test_relevance.py"):
@@ -77,11 +87,14 @@ class CodexManagerBridgeContractTests(unittest.TestCase):
     def test_generated_media_and_cache_artifacts_cannot_be_staged(self):
         for path in (
             "out/final.mp4",
+            "public/runs/final.mp4",
             "downloads/archive.zip",
             "models/weights.onnx",
             "node_modules/some-package/index.js",
             "cache/run.log",
             "__pycache__/module.pyc",
+            "assets/generated.png",
+            "captions/episode.srt",
         ):
             with self.subTest(path=path):
                 self.assertTrue(bridge.is_disallowed_artifact_path(path))
@@ -91,11 +104,13 @@ class CodexManagerBridgeContractTests(unittest.TestCase):
     def test_public_summary_scrubs_tokens_and_windows_paths(self):
         source = (
             r"failed at C:\Users\asus\Projects\jack-pockets\out\clip.mp4 "
-            "with ghp_ABCDEFGHIJKLMNOPQRSTUVWX and api_key=very-secret-token-value"
+            "with ghp_ABCDEFGHIJKLMNOPQRSTUVWX and api_key=very-secret-token-value "
+            "and PEXELS_API_KEY=abcdefgh1234567890"
         )
         redacted = bridge.scrub_public_text(source)
         self.assertNotIn("ghp_ABCDEFGHIJKLMNOPQRSTUVWX", redacted)
         self.assertNotIn("very-secret-token-value", redacted)
+        self.assertNotIn("abcdefgh1234567890", redacted)
         self.assertNotIn(r"C:\Users\asus", redacted)
         self.assertIn("[REDACTED", redacted)
 
