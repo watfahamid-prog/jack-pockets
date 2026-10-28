@@ -32,7 +32,7 @@ For `LLM_PROVIDER=auto`, configure at least one hosted provider key:
 - `OPENAI_API_KEY`
 - `ANTHROPIC_API_KEY`
 
-The documentary pipeline supports Gemini, OpenAI and Anthropic providers. `LLM_PROVIDER=auto` tries configured providers in the order Gemini → OpenAI → Anthropic. For local coding agents, see [Claude Code and Codex with Ollama](docs/claude-codex-ollama-setup.md); this is separate from documentary planning and rendering.
+The documentary pipeline supports Gemini, OpenAI and Anthropic providers. `LLM_PROVIDER=auto` tries configured providers in the order Gemini → OpenAI → Anthropic.
 
 Recommended for real footage:
 - `PEXELS_API_KEY`
