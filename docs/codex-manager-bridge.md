@@ -1,3 +1,5 @@
+> **Status: dormant / not the active team workflow.** The user reported poor results from the Codex CLI test and has chosen to use Codex Desktop first. Do not run this setup or reactivate this bridge unless the user explicitly authorizes it again. Use docs/ai-coding-team-workflow.md for the current manual desktop workflow.
+
 # ChatGPT-to-Codex local task bridge
 
 ## What this does
