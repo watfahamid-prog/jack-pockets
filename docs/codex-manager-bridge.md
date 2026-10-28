@@ -2,7 +2,7 @@
 
 ## What this does
 
-This is a local bridge between the ChatGPT manager in this conversation and the Codex coding agent authenticated with the user's ChatGPT plan. ChatGPT creates a GitHub issue containing a detailed task. A poller on the user's Windows computer detects that task, launches Codex CLI in a workspace-write sandbox, commits its changes to a feature branch, pushes that branch and opens a draft pull request. The result is posted back on the same issue so ChatGPT can inspect the result through the GitHub connection.
+This is a local bridge between the ChatGPT manager in this conversation and the Codex coding agent authenticated with the user's ChatGPT plan. ChatGPT creates a GitHub issue containing a detailed task. A poller on the user's Windows computer detects that task, creates a dedicated Git worktree from origin/main, launches Codex CLI there in a workspace-write sandbox, commits its changes to a feature branch, pushes that branch and opens a draft pull request. The user's original checkout remains on main. The result is posted back on the same issue so ChatGPT can inspect the result through the GitHub connection.
 
 This is a GitHub-mediated handoff, not direct access to the private Codex desktop conversation history. It uses the official Codex CLI non-interactive interface. The separate Codex desktop app can remain installed.
 
@@ -50,8 +50,8 @@ The watch mode polls every 60 seconds. Keep the PowerShell window open and the c
 - The repository folder must be the exact Jack Pockets Git checkout with origin pointing to watfahamid-prog/jack-pockets.
 - The local checkout must be on main with no tracked edits. The known untracked file local_agent_test.py is allowed but is never staged or committed; its SHA-256 is checked before and after the task.
 - The bridge synchronizes main with a fast-forward-only pull. It never uses reset --hard, git clean, force-push, or merge.
-- Each task gets a unique branch named codex/manager-issue-NUMBER. If that branch already exists, the bridge stops rather than overwrite it.
-- Codex runs with workspace-write sandbox and approval policy never. The sandbox limits file writes to the project workspace and blocks network access by default. The bridge removes API-key variables from the child process environment and refuses Codex CLI authentication that reports API-key use.
+- Each task gets a unique branch named codex/manager-issue-NUMBER and a separate worktree under `%LOCALAPPDATA%\\JackPocketsCodexBridge\\worktrees`. Codex never runs inside the user's original checkout. If the branch or task worktree path already exists, the bridge stops rather than overwrite it.
+- Codex runs in that separate task worktree with workspace-write sandbox and approval policy never. The sandbox limits file writes to the project workspace and blocks network access by default. The bridge removes API-key variables from the child process environment and refuses Codex CLI authentication that reports API-key use.
 - Codex is explicitly told not to change branches, commit, push, merge, call paid providers, generate a full video, or weaken tests. The wrapper handles staging, committing and publishing.
 - Obvious secret-bearing paths (.env files except example/template files, key/certificate files, credential files, .npmrc, .aws and .ssh content) are never staged. If such a file is changed/created, the bridge stops and leaves it for manual review.
 - Local task output and logs are stored under the user's LocalAppData folder, not committed to the repository.
@@ -60,4 +60,4 @@ The watch mode polls every 60 seconds. Keep the PowerShell window open and the c
 
 ## Test and verification limits
 
-Python unit tests validate task filtering, status handling, path protection and the local scratch-file exclusion. They do not prove the local machine's GitHub/Codex authentication is configured. Before relying on the bridge, run it with no pending tasks and verify it reports an empty queue. The first real task should be a small code change and must end in a draft PR with CI results. No merge is automated.
+Python unit tests validate task filtering, status handling, path protection, the local scratch-file exclusion, and that creating a task worktree leaves main and the untracked scratch file untouched. They do not prove the local machine's GitHub/Codex authentication is configured. Before relying on the bridge, run it with no pending tasks and verify it reports an empty queue. The first real task should be a small code change and must end in a draft PR with CI results. No merge is automated.
