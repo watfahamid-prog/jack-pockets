@@ -42,10 +42,14 @@ SECRET_PATTERNS = (
     re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
 )
 ARTIFACT_SUFFIXES = {
-    ".mp4", ".mkv", ".mov", ".webm", ".wav", ".mp3", ".flac",
+    ".mp4", ".mkv", ".mov", ".webm", ".wav", ".mp3", ".flac", ".m4a", ".aac", ".ogg",
+    ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".srt", ".vtt",
     ".zip", ".7z", ".gguf", ".onnx", ".pyc", ".jsonl", ".log", ".tmp",
 }
-ARTIFACT_DIRS = {"out", "node_modules", "__pycache__", ".venv", "venv", "models", "downloads"}
+ARTIFACT_DIRS = {
+    "out", "runs", "node_modules", "__pycache__", ".venv", "venv",
+    "models", "downloads", "cache", "caches",
+}
 
 
 class BridgeError(RuntimeError):
@@ -120,6 +124,11 @@ def issue_is_eligible(issue: dict[str, Any]) -> bool:
 def issue_is_processed(comments: list[dict[str, Any]]) -> bool:
     """Do not silently repeat tasks that were already started or blocked."""
     for comment in comments:
+        # Only our own status comments may suppress a task; any repository user
+        # can comment on a public issue and must not be able to spoof completion.
+        author = (comment.get("user") or {}).get("login", "")
+        if author != TASK_AUTHOR:
+            continue
         body = comment.get("body") or ""
         if any(marker in body for marker in STATUS_MARKERS.values()):
             return True
@@ -161,7 +170,11 @@ def is_sensitive_path(relative_path: str) -> bool:
     path = Path(normalized)
     name = path.name.lower()
     parts = {part.lower() for part in path.parts}
-    if name == ".env" or (name.startswith(".env.") and name not in {".env.example", ".env.sample", ".env.template"}):
+    if (
+        name == ".env"
+        or (name.startswith(".env.") and name not in {".env.example", ".env.sample", ".env.template"})
+        or (name.endswith(".env") and name not in {".env.example", ".env.sample", ".env.template"})
+    ):
         return True
     if name in {".npmrc", ".pypirc", "credentials.json", "secrets.json", "auth.json", "id_rsa", "id_ed25519"}:
         return True
@@ -197,7 +210,7 @@ def scrub_public_text(text: str, known_secret_values: list[str] | None = None) -
     for pattern in SECRET_PATTERNS:
         result = pattern.sub("[REDACTED_SECRET_PATTERN]", result)
     result = re.sub(
-        r"(?i)\b(api[_ -]?key|access[_ -]?token|secret|password)\s*[:=]\s*['\"]?[^\s'\"]{12,}",
+        r"(?i)\b[\w]*(?:api[_ -]?key|access[_ -]?token|secret|password|credential)[\w]*\s*[:=]\s*['\"]?[^\s'\"]{8,}",
         r"\1=[REDACTED]",
         result,
     )
