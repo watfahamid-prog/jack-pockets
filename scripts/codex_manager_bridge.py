@@ -11,6 +11,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -32,6 +33,19 @@ STATUS_MARKERS = {
 PRESERVED_UNTRACKED = {"local_agent_test.py"}
 MAX_TASK_BODY_CHARS = 12000
 CODEX_TIMEOUT_SECONDS = 60 * 60
+SECRET_PATTERNS = (
+    re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,})\b"),
+    re.compile(r"\bsk-[A-Za-z0-9_-]{20,}\b"),
+    re.compile(r"\bAIza[0-9A-Za-z_-]{30,}\b"),
+    re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{20,}\b"),
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
+)
+ARTIFACT_SUFFIXES = {
+    ".mp4", ".mkv", ".mov", ".webm", ".wav", ".mp3", ".flac",
+    ".zip", ".7z", ".gguf", ".onnx", ".pyc", ".jsonl", ".log", ".tmp",
+}
+ARTIFACT_DIRS = {"out", "node_modules", "__pycache__", ".venv", "venv", "models", "downloads"}
 
 
 class BridgeError(RuntimeError):
@@ -156,16 +170,41 @@ def is_sensitive_path(relative_path: str) -> bool:
     return bool(parts.intersection({".aws", ".ssh", "secrets", "credentials"}))
 
 
+def is_disallowed_artifact_path(relative_path: str) -> bool:
+    normalized = relative_path.replace("\\", "/").strip("/")
+    path = Path(normalized)
+    parts = {part.lower() for part in path.parts}
+    return path.suffix.lower() in ARTIFACT_SUFFIXES or bool(parts.intersection(ARTIFACT_DIRS))
+
+
 def paths_to_stage(entries: list[tuple[str, str]]) -> list[str]:
-    """Exclude the user's pre-existing scratch file and reject obvious secret files."""
+    """Exclude the user's scratch file and reject secrets and generated artifacts."""
     paths: list[str] = []
     for status, path in entries:
         if status == "??" and path in PRESERVED_UNTRACKED:
             continue
         if is_sensitive_path(path):
             raise BridgeError(f"Refusing to stage a sensitive-looking path: {path}")
+        if is_disallowed_artifact_path(path):
+            raise BridgeError(f"Refusing to stage a generated media/cache artifact: {path}")
         paths.append(path)
     return paths
+
+
+def scrub_public_text(text: str, known_secret_values: list[str] | None = None) -> str:
+    """Remove likely credential strings and private Windows paths before posting to GitHub."""
+    result = re.sub(r"[A-Za-z]:\\Users\\[^\\\s]+(?:\\[^\\\s]+)*", "%USERPROFILE%\\[local-path]", text)
+    for pattern in SECRET_PATTERNS:
+        result = pattern.sub("[REDACTED_SECRET_PATTERN]", result)
+    result = re.sub(
+        r"(?i)\b(api[_ -]?key|access[_ -]?token|secret|password)\s*[:=]\s*['\"]?[^\s'\"]{12,}",
+        r"\1=[REDACTED]",
+        result,
+    )
+    for secret in known_secret_values or []:
+        if len(secret) >= 12:
+            result = result.replace(secret, "[REDACTED_ENV_SECRET]")
+    return result
 
 
 def sha256_file(path: Path) -> str | None:
@@ -183,8 +222,13 @@ class CodexManagerBridge:
         self.repo_path = repo_path.resolve()
         self.poll_interval = max(30, poll_interval)
         local_app_data = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local")))
-        self.log_dir = local_app_data / "JackPocketsCodexBridge" / "logs"
+        self.bridge_home = local_app_data / "JackPocketsCodexBridge"
+        self.log_dir = self.bridge_home / "logs"
+        self.codex_home = self.bridge_home / "codex-home"
         self.log_dir.mkdir(parents=True, exist_ok=True)
+        self.codex_home.mkdir(parents=True, exist_ok=True)
+        # Use an isolated Codex profile so stale Ollama/Qwen config is never used or overwritten.
+        os.environ["CODEX_HOME"] = str(self.codex_home)
 
     def git(self, *args: str, timeout: int = 120) -> str:
         result = run_command(["git", "-C", str(self.repo_path), *args], timeout=timeout)
@@ -331,9 +375,21 @@ class CodexManagerBridge:
 
             # Codex must authenticate through the ChatGPT plan; API-key variables are not inherited.
             child_env = os.environ.copy()
-            child_env.pop("OPENAI_API_KEY", None)
-            child_env.pop("ANTHROPIC_API_KEY", None)
-            child_env.pop("ANTHROPIC_AUTH_TOKEN", None)
+            known_secret_values = [
+                value for key, value in child_env.items()
+                if value and any(token in key.upper() for token in (
+                    "API_KEY", "ACCESS_TOKEN", "AUTH_TOKEN", "SECRET", "PASSWORD",
+                    "CREDENTIAL", "GITHUB_TOKEN", "GH_TOKEN", "NPM_TOKEN", "PYPI_TOKEN",
+                ))
+            ]
+            for key in list(child_env):
+                upper = key.upper()
+                if any(token in upper for token in (
+                    "API_KEY", "ACCESS_TOKEN", "AUTH_TOKEN", "SECRET", "PASSWORD",
+                    "CREDENTIAL", "GITHUB_TOKEN", "GH_TOKEN", "NPM_TOKEN", "PYPI_TOKEN",
+                )):
+                    child_env.pop(key, None)
+            child_env["CODEX_HOME"] = str(self.codex_home)
             command = [
                 "codex", "exec", "--json",
                 "--sandbox", "workspace-write",
@@ -370,6 +426,7 @@ class CodexManagerBridge:
                 final_message = "Codex returned no final summary. Inspect the local JSONL log before accepting changes."
             if len(final_message) > 9000:
                 final_message = final_message[:9000] + "\n\n[Agent summary truncated; full log remains on the local computer.]"
+            final_message = scrub_public_text(final_message, known_secret_values)
 
             if sha256_file(self.repo_path / "local_agent_test.py") != original_file_hash:
                 raise BridgeError("local_agent_test.py changed during the task. It was not staged or committed; inspect the local file and branch manually.")
@@ -383,7 +440,7 @@ class CodexManagerBridge:
                     number, "completed",
                     "Codex finished without producing repository changes.\n\n"
                     + final_message
-                    + f"\n\nLocal log: {log_path}"
+                    + "\n\nDetailed execution logs remain on the local computer and were not attached here."
                 )
                 require_success(run_command(["git", "-C", str(self.repo_path), "switch", "main"], timeout=60), "Returning to main")
                 return
@@ -454,7 +511,7 @@ class CodexManagerBridge:
             try:
                 self.comment(
                     number, status,
-                    f"Codex bridge stopped safely: {str(exc)}\n\n"
+                    scrub_public_text(f"Codex bridge stopped safely: {str(exc)}") + "\n\n"
                     + (f"Branch retained for inspection: {branch}.\n" if branch_created else "")
                     + "No merge was performed. Review the local Git status before trying another task."
                 )
