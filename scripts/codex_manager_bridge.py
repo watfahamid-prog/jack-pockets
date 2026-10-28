@@ -188,7 +188,10 @@ class CodexManagerBridge:
 
     def git(self, *args: str, timeout: int = 120) -> str:
         result = run_command(["git", "-C", str(self.repo_path), *args], timeout=timeout)
-        return require_success(result, "git " + " ".join(args))
+        if result.returncode != 0:
+            require_success(result, "git " + " ".join(args))
+        # Preserve whitespace and NUL delimiters because porcelain status output is parsed byte-for-byte.
+        return result.stdout.rstrip("\r\n")
 
     def gh_json(self, *args: str) -> Any:
         result = run_command(["gh", "api", *args], timeout=60)
