@@ -36,7 +36,7 @@ The setup script installs the official Codex CLI package if missing, and install
 2. Codex CLI sign-in using the user's ChatGPT account (not an OpenAI API key).
 3. Starting the poller.
 
-The setup script does not create or store a personal access token, touch model storage, or change GitHub settings. The user may stop the bridge with Ctrl+C and restart it with the same command.
+The setup script does not create or store a personal access token, touch model storage, or change GitHub settings. It uses an isolated Codex profile under `%LOCALAPPDATA%\\JackPocketsCodexBridge\\codex-home`, separate from any existing desktop Codex profile/settings; you sign in to that profile once with ChatGPT. It removes `OPENAI_API_KEY` only from the setup process environment so this bridge does not accidentally use API-key billing. The user may stop the bridge with Ctrl+C and restart it with the same command.
 
 To check the queue once without keeping a poller running:
 
