@@ -8,12 +8,12 @@ class ArchiveLicensePolicyTests(unittest.TestCase):
         self.assertTrue(_archive_license_is_usable("https://creativecommons.org/publicdomain/zero/1.0/"))
         self.assertTrue(_archive_license_is_usable("https://creativecommons.org/publicdomain/mark/1.0/"))
 
-    def test_accepts_attribution_and_sharealike_licenses(self):
+    def test_accepts_attribution_license(self):
         self.assertTrue(_archive_license_is_usable("https://creativecommons.org/licenses/by/4.0/"))
-        self.assertTrue(_archive_license_is_usable("http://creativecommons.org/licenses/by-sa/3.0/"))
 
-    def test_rejects_noncommercial_and_noderivatives_variants(self):
+    def test_rejects_sharealike_and_restricted_variants(self):
         for url in (
+            "https://creativecommons.org/licenses/by-sa/4.0/",
             "https://creativecommons.org/licenses/by-nc/4.0/",
             "https://creativecommons.org/licenses/by-nd/4.0/",
             "https://creativecommons.org/licenses/by-nc-sa/4.0/",
