@@ -86,7 +86,7 @@ class ArchiveLicensePolicyTests(unittest.TestCase):
                         "extmetadata": metadata(
                             "CC BY 4.0",
                             "https://creativecommons.org/licenses/by/4.0/",
-                            "<span>Jane\\n    Creator</span>",
+                            "<span>Jane\n    Creator</span>",
                         ),
                     }],
                 },
