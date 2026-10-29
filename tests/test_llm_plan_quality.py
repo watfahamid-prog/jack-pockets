@@ -35,6 +35,18 @@ class LLMPlanKeywordQualityTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "concrete subject terms"):
             _normalize_plan(make_plan(["cinematic footage sequence", "bizarre future story"]), "test")
 
+    def test_malformed_keyword_shape_fails_with_validation_error(self):
+        plan = make_plan(["AS 7007 router incident", "NANOG route leak"])
+        plan["beats"][0]["keywords"] = 42
+        with self.assertRaisesRegex(ValueError, "concrete subject terms"):
+            _normalize_plan(plan, "test")
+
+    def test_non_list_citation_metadata_is_not_treated_as_approved_urls(self):
+        plan = make_plan(["AS 7007 router incident", "NANOG route leak"])
+        plan["beats"][0]["source_urls"] = {"https://example.org/looks-like-a-source": True}
+        normalized = _normalize_plan(plan, "test")
+        self.assertEqual(normalized["beats"][0]["source_urls"], [])
+
     def test_accepts_plans_with_concrete_searchable_subject_terms(self):
         normalized = _normalize_plan(
             make_plan(["AS 7007 router incident", "NANOG route leak"]),
