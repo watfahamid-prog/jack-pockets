@@ -28,7 +28,7 @@ class ManifestTests(unittest.TestCase):
             {"word": "First", "start": 0.0, "end": 0.4},
             {"word": "part.", "start": 0.4, "end": 1.0},
             {"word": "Second", "start": 2.0, "end": 2.4},
-            {"word": "part.", "start": 2.4, "end": 3.0},
+            {"word": "part.", "start": 2.4, "end": 480.0},
         ]
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "manifest.json"
@@ -38,7 +38,7 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(data["beats"][0]["start"], 0.0)
         self.assertEqual(data["beats"][1]["start"], data["beats"][0]["end"])
         self.assertEqual(data["beats"][1]["start"], 1.0)
-        self.assertEqual(data["beats"][1]["end"], 3.0)
+        self.assertEqual(data["beats"][1]["end"], 480.0)
 
     def test_build_enables_captions_and_preserves_aligned_words(self):
         plan = {"topic": "Test topic", "beats": [{"id": "b1", "narration": "Hello world.", "start": 0, "end": 480}]}
