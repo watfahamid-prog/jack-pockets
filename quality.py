@@ -172,7 +172,7 @@ def validate(path: str) -> list[str]:
                     license_host = (parsed_license.hostname or "").lower().removeprefix("www.") if parsed_license else ""
                     license_path = parsed_license.path.rstrip("/") + "/" if parsed_license else ""
                     cc_by_url = license_host == "creativecommons.org" and license_path.startswith("/licenses/by/")
-                    cc_by_label = bool(re.search(r"\\bcc\\s*by(?:\\s|$)", license_text, re.IGNORECASE))
+                    cc_by_label = bool(re.search(r"\bcc\s*by(?:\s|$)", license_text, re.IGNORECASE))
                     if (cc_by_url or cc_by_label) and not str(asset.get("creator") or asset.get("credit") or "").strip():
                         errors.append(f"provenance gate: CC BY asset has no creator credit ({asset.get('id')})")
 
