@@ -12,7 +12,7 @@ from pathlib import Path
 from assets import generate_role_asset, make_asset_plan, reset_asset_download_budget, search_pexels, search_pexels_videos, search_pixabay, search_pixabay_videos, search_commons_videos, search_commons_photos, search_archive_videos
 from llm import generate
 from manifest import build
-from relevance import _approved_sources, _asset_relevance, _asset_search_queries, _relevant_sources
+from relevance import _collect_source_urls, _sources_for_urls, _asset_relevance, _asset_search_queries, _relevant_sources
 from music import get_music
 from quality import validate
 from research import search_web
@@ -79,14 +79,14 @@ def main() -> None:
         # Source/document graphics use beat["research"] as their evidence feed.
         # Exclude raw search hits that did not pass the beat relevance/authority
         # filter, and order survivors using the approved shortlist's ranking.
-        beat["research"] = _approved_sources(combined_sources, verified_candidate_urls)
+        beat["research"] = _sources_for_urls(combined_sources, verified_candidate_urls)
         if not verified_candidate_urls:
             print(f"[research] beat {index}: no sufficiently relevant source found; claims need review", flush=True)
         research.extend(found)
 
-    plan["sources"] = list(dict.fromkeys(
-        str(x["url"]) for x in research if isinstance(x, dict) and x.get("url")
-    ))
+    # Keep raw results in research.json for auditability, but manifest sources
+    # should contain only URLs selected as relevant to at least one beat.
+    plan["sources"] = _collect_source_urls(plan.get("beats", []))
     (root / "research.json").write_text(json.dumps(research, indent=2), encoding="utf-8")
     (root / "plan.json").write_text(json.dumps(plan, indent=2), encoding="utf-8")
 
