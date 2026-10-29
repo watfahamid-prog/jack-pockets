@@ -1,6 +1,6 @@
 import unittest
 
-from assets import _archive_license_is_usable
+from assets import _archive_creator, _archive_license_is_usable, _media_license_is_usable
 
 
 class ArchiveLicensePolicyTests(unittest.TestCase):
@@ -21,6 +21,23 @@ class ArchiveLicensePolicyTests(unittest.TestCase):
         ):
             with self.subTest(url=url):
                 self.assertFalse(_archive_license_is_usable(url))
+
+    def test_media_license_requires_creator_for_cc_by(self):
+        self.assertTrue(_media_license_is_usable(
+            "https://creativecommons.org/licenses/by/4.0/", creator="Ada Lovelace"
+        ))
+        self.assertFalse(_media_license_is_usable(
+            "https://creativecommons.org/licenses/by/4.0/"
+        ))
+        self.assertTrue(_media_license_is_usable(
+            "https://creativecommons.org/publicdomain/zero/1.0/"
+        ))
+
+    def test_creator_metadata_collapses_whitespace_and_removes_markup(self):
+        self.assertEqual(
+            _archive_creator({"creator": "<span>Jane\n    Doe</span>"}),
+            "Jane Doe",
+        )
 
     def test_rejects_unknown_hosts_and_noncreativecommons_licenses(self):
         self.assertFalse(_archive_license_is_usable("https://example.com/licenses/by/4.0/"))
