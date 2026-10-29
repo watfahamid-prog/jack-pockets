@@ -157,6 +157,56 @@ class QualityGateTests(unittest.TestCase):
             errors = validate(str(manifest_path))
         self.assertFalse(any("asset source gate" in error for error in errors))
 
+    def test_rejects_invalid_asset_source_url(self):
+        manifest = self._base()
+        asset = {
+            "id": "unsafe-source",
+            "kind": "video",
+            "role": "b-roll",
+            "src": "https://assets.example/clip.mp4",
+            "source_url": "javascript:alert(1)",
+            "license": "Pexels",
+            "license_url": "https://www.pexels.com/license/",
+        }
+        manifest["sources"] = ["https://example.test/source"]
+        manifest["beats"] = [{
+            "id": "b1", "start": 0, "end": 480,
+            "source_urls": ["https://example.test/source"],
+            "assets": [asset],
+            "shots": [{"id": "s1", "start": 0, "end": 480, "assetIds": ["unsafe-source"], "layers": [{"kind": "image", "assetId": "unsafe-source"}]}],
+        }]
+        errors = validate(self._write(manifest))
+        self.assertTrue(any("real asset has invalid source_url" in error for error in errors))
+
+    def test_cc_by_assets_require_creator_credit_and_valid_license_url(self):
+        manifest = self._base()
+        asset = {
+            "id": "cc-by-clip",
+            "kind": "video",
+            "role": "b-roll",
+            "src": "https://assets.example/clip.mp4",
+            "source_url": "https://commons.wikimedia.org/wiki/File:Clip.mp4",
+            "license": "Wikimedia Commons / CC BY 4.0",
+            "license_url": "https://creativecommons.org/licenses/by/4.0/",
+        }
+        manifest["sources"] = ["https://example.test/source"]
+        manifest["beats"] = [{
+            "id": "b1", "start": 0, "end": 480,
+            "source_urls": ["https://example.test/source"],
+            "assets": [asset],
+            "shots": [{"id": "s1", "start": 0, "end": 480, "assetIds": ["cc-by-clip"], "layers": [{"kind": "image", "assetId": "cc-by-clip"}]}],
+        }]
+        errors_without_credit = validate(self._write(manifest))
+        self.assertTrue(any("CC BY asset has no creator credit" in error for error in errors_without_credit))
+
+        asset["credit"] = "Jane Creator"
+        errors_with_credit = validate(self._write(manifest))
+        self.assertFalse(any("CC BY asset has no creator credit" in error for error in errors_with_credit))
+
+        asset["license_url"] = "javascript:alert(1)"
+        errors_bad_license_url = validate(self._write(manifest))
+        self.assertTrue(any("real asset has invalid license_url" in error for error in errors_bad_license_url))
+
     def test_rejects_overlapping_shots(self):
         manifest = self._base()
         assets = [
