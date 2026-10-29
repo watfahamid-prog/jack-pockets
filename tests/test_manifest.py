@@ -19,6 +19,27 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(first_span, (0, 3))
         self.assertEqual(second_span, (3, 5))
 
+    def test_build_fills_inter_beat_silence_with_visual_timeline(self):
+        plan = {"topic": "Test topic", "beats": [
+            {"id": "b1", "narration": "First part."},
+            {"id": "b2", "narration": "Second part."},
+        ]}
+        words = [
+            {"word": "First", "start": 0.0, "end": 0.4},
+            {"word": "part.", "start": 0.4, "end": 1.0},
+            {"word": "Second", "start": 2.0, "end": 2.4},
+            {"word": "part.", "start": 2.4, "end": 3.0},
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "manifest.json"
+            with patch.object(manifest, "refine_beat", side_effect=lambda beat: beat), patch.object(manifest, "build_shots", side_effect=lambda beat, **kwargs: beat):
+                manifest.build(plan, "narration.mp3", words, [[], []], {"fps": 30, "width": 1920, "height": 1080}, output)
+            data = json.loads(output.read_text(encoding="utf-8"))
+        self.assertEqual(data["beats"][0]["start"], 0.0)
+        self.assertEqual(data["beats"][1]["start"], data["beats"][0]["end"])
+        self.assertEqual(data["beats"][1]["start"], 1.0)
+        self.assertEqual(data["beats"][1]["end"], 3.0)
+
     def test_build_enables_captions_and_preserves_aligned_words(self):
         plan = {"topic": "Test topic", "beats": [{"id": "b1", "narration": "Hello world.", "start": 0, "end": 480}]}
         words = [{"word": "Hello", "start": 0.0, "end": 2.0}, {"word": "world.", "start": 2.0, "end": 480.0}]
