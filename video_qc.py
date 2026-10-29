@@ -25,6 +25,9 @@ def inspect_video(path: str, use_scene_detect: bool = True) -> dict:
     if not shutil.which("ffprobe") or not shutil.which("ffmpeg"):
         raise RuntimeError("FFmpeg and FFprobe must be installed and available on PATH")
 
+    # Keep a small file signature with the diagnostics so the run ledger can detect
+    # reports that belong to an older file at the same path.
+    file_stat = video.stat()
     raw = _run([
         "ffprobe", "-v", "error", "-show_entries",
         "format=duration:stream=codec_type,width,height,r_frame_rate",
@@ -72,6 +75,8 @@ def inspect_video(path: str, use_scene_detect: bool = True) -> dict:
         fps_value = float(fps or 0)
     report = {
         "file": str(video.resolve()),
+        "file_size_bytes": file_stat.st_size,
+        "file_mtime_ns": file_stat.st_mtime_ns,
         "duration_seconds": round(duration, 3),
         "width": video_stream.get("width"),
         "height": video_stream.get("height"),
