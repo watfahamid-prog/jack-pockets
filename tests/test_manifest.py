@@ -32,13 +32,15 @@ class ManifestTests(unittest.TestCase):
         ]
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "manifest.json"
-            with patch.object(manifest, "refine_beat", side_effect=lambda beat: beat), patch.object(manifest, "build_shots", side_effect=lambda beat, **kwargs: beat):
+            with patch.object(manifest, "refine_beat", side_effect=lambda beat: beat):
                 manifest.build(plan, "narration.mp3", words, [[], []], {"fps": 30, "width": 1920, "height": 1080}, output)
             data = json.loads(output.read_text(encoding="utf-8"))
         self.assertEqual(data["beats"][0]["start"], 0.0)
-        self.assertEqual(data["beats"][1]["start"], data["beats"][0]["end"])
-        self.assertEqual(data["beats"][1]["start"], 1.0)
+        self.assertEqual(data["beats"][0]["end"], 2.0)
+        self.assertEqual(data["beats"][0]["shots"][-1]["end"], 2.0)
+        self.assertEqual(data["beats"][1]["start"], 2.0)
         self.assertEqual(data["beats"][1]["end"], 480.0)
+        self.assertEqual(data["beats"][1]["shots"][0]["start"], 0.0)
 
     def test_build_enables_captions_and_preserves_aligned_words(self):
         plan = {"topic": "Test topic", "beats": [{"id": "b1", "narration": "Hello world.", "start": 0, "end": 480}]}
