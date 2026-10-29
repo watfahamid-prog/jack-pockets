@@ -12,7 +12,7 @@ from pathlib import Path
 from assets import generate_role_asset, make_asset_plan, reset_asset_download_budget, search_pexels, search_pexels_videos, search_pixabay, search_pixabay_videos, search_commons_videos, search_commons_photos, search_archive_videos
 from llm import generate
 from manifest import build
-from relevance import _asset_relevance, _asset_search_queries, _relevant_sources
+from relevance import _approved_sources, _asset_relevance, _asset_search_queries, _relevant_sources
 from music import get_music
 from quality import validate
 from research import search_web
@@ -73,9 +73,13 @@ def main() -> None:
         except Exception as exc:
             print(f"[research] beat {index} search skipped: {exc}", flush=True)
             found = []
-        beat["research"] = found
-        verified_candidate_urls = _relevant_sources(args.topic, beat, [*topic_research, *found])
+        combined_sources = [*topic_research, *found]
+        verified_candidate_urls = _relevant_sources(args.topic, beat, combined_sources)
         beat["source_urls"] = verified_candidate_urls
+        # Source/document graphics use beat["research"] as their evidence feed.
+        # Exclude raw search hits that did not pass the beat relevance/authority
+        # filter, and order survivors using the approved shortlist's ranking.
+        beat["research"] = _approved_sources(combined_sources, verified_candidate_urls)
         if not verified_candidate_urls:
             print(f"[research] beat {index}: no sufficiently relevant source found; claims need review", flush=True)
         research.extend(found)
