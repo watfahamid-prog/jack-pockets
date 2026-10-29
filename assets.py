@@ -299,6 +299,23 @@ def search_pixabay(query:str,out:Path,limit:int=3)->list[dict]:
     return result
 
 
+def _archive_license_is_usable(license_url: str) -> bool:
+    """Allow licences suitable for edited/commercial video; reject NC/ND and unknown terms."""
+    parsed = urlparse(str(license_url).strip().lower())
+    host = (parsed.hostname or "").removeprefix("www.")
+    if host != "creativecommons.org":
+        return False
+
+    path = parsed.path.rstrip("/") + "/"
+    if re.fullmatch(r"/publicdomain/(?:zero|mark)/[0-9.]+/", path):
+        return True
+
+    # CC BY and CC BY-SA permit commercial reuse and adaptations when attribution
+    # and applicable share-alike terms are respected. NC and ND variants are not
+    # acceptable defaults for a monetized, edited documentary pipeline.
+    return bool(re.fullmatch(r"/licenses/(?:by|by-sa)/[0-9.]+(?:/[a-z-]+)?/", path))
+
+
 def search_archive_videos(query:str,out:Path,limit:int=3,beat:dict|None=None)->list[dict]:
     """Search Internet Archive for openly licensed documentary b-roll; no API key required."""
     out.mkdir(parents=True, exist_ok=True)
@@ -370,10 +387,11 @@ def search_archive_videos(query:str,out:Path,limit:int=3,beat:dict|None=None)->l
                         flush=True,
                     )
                     continue
-            # Only use items whose metadata explicitly identifies a permissive/public-domain license.
-            if not any(marker in license_url for marker in (
-                "creativecommons.org/licenses/", "creativecommons.org/publicdomain/",
-                "creativecommons.org/zero/")):
+            # The previous broad URL check also accepted CC-NC/CC-ND, which can
+            # block monetization or adaptations. Only accept known commercial/adaptation-
+            # friendly Creative Commons options or public-domain markers.
+            if not _archive_license_is_usable(license_url):
+                print(f"[archive] rejected unsupported license={license_url!r}", flush=True)
                 continue
             seen.add(identifier)
             try:
