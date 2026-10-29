@@ -10,6 +10,28 @@ load_dotenv()
 
 MIN_NARRATION_WORDS = 1400
 MIN_BEAT_KEYWORDS = 2
+NON_SPECIFIC_VISUAL_TERMS = {
+    "the", "and", "for", "with", "from", "into", "onto", "about", "after",
+    "before", "what", "when", "where", "which", "while", "would", "could",
+    "should", "have", "been", "were", "was", "are", "has", "had",
+    "documentary", "story", "mistake", "forever", "bizarre", "footage", "video",
+    "shot", "shots", "scene", "scenes", "cinematic", "beautiful", "dramatic",
+    "sequence", "sweeping", "visual", "visuals", "explained", "revealed",
+    "reveals", "secret", "secrets", "journey", "future", "human", "ambition",
+    "historical", "history", "contemporary", "establishing", "generated",
+    "overview", "interesting", "amazing", "thing", "things", "world",
+}
+
+
+def _concrete_keyword_terms(keywords: list[str]) -> set[str]:
+    """Keep concrete search subjects, not production directions or mood words."""
+    terms = {
+        token.lower()
+        for token in re.findall(r"[a-z0-9]{3,}", " ".join(str(x) for x in keywords).lower())
+        if not token.isdigit()
+    }
+    return terms - NON_SPECIFIC_VISUAL_TERMS
+
 
 SYSTEM = """You are the editorial brain for an automated premium documentary editor.
 Create an ORIGINAL factual long-form documentary plan. Do not copy any existing creator's script, wording, or finished video.
@@ -112,10 +134,12 @@ def _normalize_plan(value, topic: str) -> dict:
         str(beat.get("title", f"beat-{index}"))
         for index, beat in enumerate(normalized, start=1)
         if len(beat.get("keywords", [])) < MIN_BEAT_KEYWORDS
+        or len(_concrete_keyword_terms(beat.get("keywords", []))) < MIN_BEAT_KEYWORDS
     ]
     if weak_keywords:
         raise ValueError(
-            "beats need at least 2 specific searchable keywords: " + ", ".join(weak_keywords[:4])
+            "beats need at least 2 specific searchable keywords with concrete subject terms: "
+            + ", ".join(weak_keywords[:4])
         )
 
     sentences = []
