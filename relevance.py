@@ -127,6 +127,17 @@ def _relevant_sources(topic: str, beat: dict, sources: list[dict], limit: int = 
         "very", "what", "when", "where", "which", "while", "with", "would",
         "documentary", "story", "mistake", "forever", "bizarre", "internet",
     }
+    raw_keywords = beat.get("keywords") or []
+    if isinstance(raw_keywords, str):
+        raw_keywords = re.split(r"[,;|]", raw_keywords)
+    keyword_terms = {
+        _normalize_asset_term(token)
+        for token in re.findall(
+            r"[a-z0-9]{3,}",
+            " ".join(str(value) for value in raw_keywords).lower(),
+        )
+        if token not in stopwords and not token.isdigit()
+    }
     subject = f"{topic} {beat.get('title', '')} {str(beat.get('narration', ''))[:260]}"
     terms = {
         token for token in re.findall(r"[a-z0-9]{3,}", subject.lower())
@@ -145,6 +156,12 @@ def _relevant_sources(topic: str, beat: dict, sources: list[dict], limit: int = 
         # inside "planet" or "router" inside a longer unrelated word.
         searchable_terms = set(re.findall(r"[a-z0-9]{3,}", searchable))
         hits = terms & searchable_terms
+        # Topic-level overlap is not sufficient evidence for a particular beat:
+        # require at least one of its curated, concrete search keywords to appear
+        # in the source title/snippet or URL. Normalize common plurals narrowly.
+        normalized_searchable = {_normalize_asset_term(token) for token in searchable_terms}
+        if keyword_terms and not (keyword_terms & normalized_searchable):
+            continue
         # Avoid assigning generic or unrelated search results as evidence.
         if len(hits) < 2:
             continue
