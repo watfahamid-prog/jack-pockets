@@ -58,6 +58,28 @@ class QualityGateTests(unittest.TestCase):
         errors = validate(self._write(manifest))
         self.assertTrue(any("visual coverage gap between beats b1 and b2" in error for error in errors))
 
+    def test_rejects_invalid_source_url_schemes(self):
+        manifest = self._base()
+        asset = {
+            "id": "v1", "kind": "video", "role": "b-roll",
+            "src": "https://assets.example/v1.mp4",
+            "source_url": "https://example.test/v1", "license": "test",
+        }
+        manifest["sources"] = ["javascript:alert(1)"]
+        manifest["beats"] = [{
+            "id": "b1", "start": 0, "end": 480,
+            "source_urls": ["javascript:alert(1)"],
+            "assets": [asset],
+            "shots": [{
+                "id": "s1", "start": 0, "end": 480,
+                "assetIds": ["v1"],
+                "layers": [{"kind": "image", "assetId": "v1"}],
+            }],
+        }]
+        errors = validate(self._write(manifest))
+        self.assertTrue(any("invalid source URL in b1" in error for error in errors))
+        self.assertTrue(any("manifest contains an invalid source URL" in error for error in errors))
+
     def test_rejects_missing_local_media_file_before_render(self):
         manifest = self._base()
         asset = {
