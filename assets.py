@@ -522,6 +522,18 @@ def _commons_search(query:str,out:Path,limit:int=3,kind:str="video",beat:dict|No
         metadata = info.get("extmetadata") or {}
         title = str(page.get("title") or "").replace("File:","").replace("_"," ")
         description = str(metadata.get("ImageDescription", {}).get("value", "") if isinstance(metadata.get("ImageDescription"), dict) else "")
+        artist_value = metadata.get("Artist", {}).get("value", "") if isinstance(metadata.get("Artist"), dict) else ""
+        artist = _archive_creator({"creator": artist_value})[:180]
+        license_value = metadata.get("LicenseShortName", {}).get("value", "") if isinstance(metadata.get("LicenseShortName"), dict) else ""
+        license_url_value = metadata.get("LicenseUrl", {}).get("value", "") if isinstance(metadata.get("LicenseUrl"), dict) else ""
+        license_url = re.sub(r"<[^>]+>", " ", str(license_url_value)).strip()
+        if not _media_license_is_usable(license_url, license_name=str(license_value), creator=artist):
+            print(
+                f"[commons] rejected unsupported license or missing attribution "
+                f"title={title[:100]!r} license={str(license_value)[:80]!r}",
+                flush=True,
+            )
+            continue
         candidate = {"title": title, "description": description, "tags": []}
         if beat is not None:
             relevant, matched_terms = _asset_relevance(query, beat, candidate)
@@ -540,12 +552,10 @@ def _commons_search(query:str,out:Path,limit:int=3,kind:str="video",beat:dict|No
             if path.stat().st_size < 5000:
                 path.unlink(missing_ok=True)
                 continue
-            artist_value = metadata.get("Artist", {}).get("value", "") if isinstance(metadata.get("Artist"), dict) else ""
-            artist = re.sub(r"<[^>]+>", " ", str(artist_value)).strip()[:180]
-            license_value = metadata.get("LicenseShortName", {}).get("value", "Wikimedia Commons") if isinstance(metadata.get("LicenseShortName"), dict) else "Wikimedia Commons"
             result.append({
-                "id": asset_id, "kind": kind, "src": str(path), "title": str(page.get("title") or "").replace("File:","").replace("_"," "), "description": str(metadata.get("ImageDescription", {}).get("value", "") if isinstance(metadata.get("ImageDescription"), dict) else ""), "credit": artist or "Wikimedia Commons contributor",
-                "license": f"Wikimedia Commons / {license_value}", "source_url": "https://commons.wikimedia.org/wiki/" + str(page.get("title", "")).replace(" ", "_"),
+                "id": asset_id, "kind": kind, "src": str(path), "title": str(page.get("title") or "").replace("File:","").replace("_"," "), "description": description, "credit": artist,
+                "license": f"Wikimedia Commons / {license_value}", "license_url": license_url,
+                "creator": artist, "source_url": "https://commons.wikimedia.org/wiki/" + str(page.get("title", "")).replace(" ", "_"),
                 "score": 1.0, "role": "b-roll", "query": clean,
             })
             print(f"[commons] selected {kind}={page.get('title')} bytes={path.stat().st_size}", flush=True)
