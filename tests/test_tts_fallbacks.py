@@ -120,8 +120,9 @@ class TTSFallbackTests(unittest.TestCase):
              patch.object(tts, "_synthesize_kokoro", side_effect=RuntimeError("local model unavailable")), \
              patch.object(tts, "_synthesize_elevenlabs") as eleven, \
              patch.object(tts, "_synthesize_openai") as openai:
-            with self.assertRaisesRegex(RuntimeError, "no paid TTS fallback"):
+            with self.assertRaisesRegex(RuntimeError, "no paid TTS fallback") as raised:
                 tts.synthesize("A documentary narration.", self.out)
+        self.assertIn("requirements-kokoro.txt", str(raised.exception))
         eleven.assert_not_called()
         openai.assert_not_called()
 
