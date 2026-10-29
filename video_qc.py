@@ -50,6 +50,9 @@ def inspect_video(path: str, use_scene_detect: bool = True) -> dict:
             black_output.stderr,
         )
     ]
+    black_detection = "ok" if black_output.returncode == 0 else (
+        "error: " + (black_output.stderr.strip()[-500:] or "FFmpeg exited with a non-zero status")
+    )
     scene_cuts = []
     scene_detection = "not_run"
     if use_scene_detect:
@@ -83,6 +86,7 @@ def inspect_video(path: str, use_scene_detect: bool = True) -> dict:
         "fps": round(fps_value, 3),
         "has_audio": bool(audio_streams),
         "black_segments_over_0_5s": black_segments,
+        "black_detection": black_detection,
         "scene_detection": scene_detection,
         "scene_cut_count": len(scene_cuts),
         "scene_cut_times_seconds": scene_cuts,
@@ -92,10 +96,14 @@ def inspect_video(path: str, use_scene_detect: bool = True) -> dict:
         report["warnings"].append("No audio stream found")
     if duration <= 0:
         report["warnings"].append("Video duration is missing or invalid")
+    if black_detection != "ok":
+        report["warnings"].append("Black-frame detection failed; black segments could not be reliably assessed")
     if black_segments:
         report["warnings"].append("Detected long black segments; inspect them against intentional fades")
     if scene_detection == "not_installed":
         report["warnings"].append("PySceneDetect is not installed; scene-change analysis was skipped")
+    elif scene_detection.startswith("error:"):
+        report["warnings"].append("Scene-change analysis failed; inspect the recorded diagnostic error")
     return report
 
 
