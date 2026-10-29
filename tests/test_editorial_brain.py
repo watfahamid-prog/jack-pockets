@@ -1,9 +1,22 @@
 import unittest
 
-from editorial_brain import _asset_score, build_shots, sentences
+from editorial_brain import _asset_score, _span, build_shots, sentences
 
 
 class FootageMatchingTests(unittest.TestCase):
+    def test_sentence_span_handles_contractions_without_shifting_following_words(self):
+        aligned = [
+            {"word": "We’re", "start": 0.0, "end": 0.3},
+            {"word": "not", "start": 0.3, "end": 0.5},
+            {"word": "done.", "start": 0.5, "end": 0.8},
+            {"word": "Next", "start": 0.8, "end": 1.0},
+            {"word": "story.", "start": 1.0, "end": 1.3},
+        ]
+        first_span = _span("We're not done.", aligned, 0)
+        second_span = _span("Next story.", aligned, first_span[1])
+        self.assertEqual(first_span, (0, 3))
+        self.assertEqual(second_span, (3, 5))
+
     def test_sentence_splitter_splits_normal_prose(self):
         self.assertEqual(
             sentences("Gold is rare. The auction followed. Why did it happen?"),
