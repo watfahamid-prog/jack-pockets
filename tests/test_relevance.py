@@ -58,6 +58,23 @@ class ApprovedResearchTests(unittest.TestCase):
 
 
 class AssetRelevanceTests(unittest.TestCase):
+    def test_source_relevance_matches_singular_and_plural_subject_terms(self):
+        topic = "Internet reliability"
+        beat = {
+            "title": "Routing hardware problems",
+            "keywords": ["routers network"],
+            "narration": "The router network failed.",
+        }
+        sources = [{
+            "url": "https://nanog.org/incident-report",
+            "title": "Router networks fail",
+            "content": "Routers handle packet delivery during the incident.",
+        }]
+        self.assertEqual(
+            _relevant_sources(topic, beat, sources),
+            ["https://nanog.org/incident-report"],
+        )
+
     def test_media_queries_use_short_subject_phrases_not_full_visual_directions(self):
         beat = {
             "title": "The Emerging Frontier: Commercial Space and Lunar Property",
