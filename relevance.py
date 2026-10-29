@@ -285,3 +285,25 @@ def _collect_source_urls(beats: list[dict]) -> list[str]:
                 result.append(url)
                 seen.add(url)
     return result
+
+def _evidence_url_errors(beats: list[dict]) -> list[str]:
+    """Validate per-beat citation URLs before expensive narration/media work begins."""
+    errors: list[str] = []
+    for index, beat in enumerate(beats):
+        if not isinstance(beat, dict):
+            errors.append(f"evidence gate: invalid beat record at position {index + 1}")
+            continue
+        beat_id = str(beat.get("id") or f"beat-{index + 1}")
+        urls = beat.get("source_urls")
+        if not isinstance(urls, list) or not urls:
+            errors.append(f"evidence gate: beat has no supporting source_urls: {beat_id}")
+            continue
+        for value in urls:
+            url = str(value or "").strip()
+            if not url:
+                errors.append(f"evidence gate: empty source URL in {beat_id}")
+                continue
+            parsed = urlparse(url)
+            if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+                errors.append(f"evidence gate: invalid source URL in {beat_id}")
+    return sorted(set(errors))
