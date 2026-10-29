@@ -107,6 +107,13 @@ class AssetRelevanceTests(unittest.TestCase):
         self.assertTrue(relevant_reverse)
         self.assertEqual(matched_reverse, ["network", "router"])
 
+    def test_plural_normalization_does_not_turn_news_into_new(self):
+        beat = {"title": "Daily news report", "keywords": ["news"]}
+        asset = {"title": "New car on a road", "description": "", "tags": []}
+        relevant, matched = _asset_relevance("news", beat, asset)
+        self.assertFalse(relevant)
+        self.assertEqual(matched, [])
+
     def test_accepts_core_technical_subject_when_title_omits_query_modifiers(self):
         beat = {
             "title": "The April 1997 Black Hole",
