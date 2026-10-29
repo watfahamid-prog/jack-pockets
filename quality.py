@@ -21,9 +21,41 @@ def _as_float(value, default=0.0) -> float:
         return default
 
 
+def _find_public_root(manifest_path: Path) -> Path:
+    resolved = manifest_path.resolve()
+    for parent in resolved.parents:
+        if parent.name == "public":
+            return parent
+    return (Path.cwd() / "public").resolve()
+
+
+def _asset_source_error(asset: dict, public_root: Path) -> str | None:
+    asset_id = str(asset.get("id") or "unknown")
+    source = str(asset.get("src") or "").strip()
+    if not source:
+        return f"asset source gate: missing media src ({asset_id})"
+    if source.startswith(("http://", "https://")):
+        # External media can be intentional; do not make network requests during QC.
+        return None
+
+    source_path = Path(source)
+    if source_path.is_absolute():
+        resolved = source_path.resolve()
+    else:
+        resolved = (public_root / source_path).resolve()
+    try:
+        resolved.relative_to(public_root)
+    except ValueError:
+        return f"asset source gate: local media path escapes public directory ({asset_id})"
+    if not resolved.is_file():
+        return f"asset source gate: local media file does not exist ({asset_id}: {source})"
+    return None
+
+
 def validate(path: str) -> list[str]:
     manifest_path = Path(path)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    public_root = _find_public_root(manifest_path)
     errors: list[str] = []
     if manifest.get("version") != 2:
         errors.append("unsupported manifest version")
@@ -99,6 +131,9 @@ def validate(path: str) -> list[str]:
             if not ids:
                 errors.append(f"motion gate: shot has no visual asset: {shot.get('id')}")
             for asset in chosen:
+                source_error = _asset_source_error(asset, public_root)
+                if source_error:
+                    errors.append(source_error)
                 kind = str(asset.get("kind", "")).lower()
                 role = str(asset.get("role", "")).lower()
                 if kind in {"photo", "document"} and role not in STATIC_EVIDENCE_ROLES:
