@@ -25,8 +25,12 @@ def build(plan,audio_src,words,assets_by_beat,profile,out):
         start_i,end_i=match_span(narration,global_words,search_pos)
         if end_i<=start_i: raise ValueError(f"Whisper alignment could not map beat {i+1}.")
         beat=dict(b);beat["id"]=beat.get("id",f"beat-{i+1}")
-        beat["start"]=round(float(global_words[start_i]["start"]),3)
-        beat["end"]=round(max(beat["start"]+.5,float(global_words[end_i-1]["end"])),3)
+        # Start the first visual at frame zero and let each incoming beat cover
+        # the pause after the previous spoken beat. The Remotion composition
+        # otherwise has no active beat during inter-word/inter-beat silence.
+        beat["start"] = 0.0 if not beats else float(beats[-1]["end"])
+        beat["end"] = round(max(beat["start"] + .5, float(global_words[end_i - 1]["end"])), 3)
+        beat["start"] = round(beat["start"], 3)
         beat["assets"]=assets_by_beat[i] if i<len(assets_by_beat) else []
         beat["actions"]=beat.get("actions",[]);beat["sfx"]=beat.get("sfx",[])
         beat=refine_beat(beat)
