@@ -133,6 +133,27 @@ class AssetRelevanceTests(unittest.TestCase):
         self.assertIn("router", matched)
         self.assertIn("network", matched)
 
+    def test_asset_relevance_accepts_keyword_string_as_well_as_list(self):
+        asset = {
+            "title": "Router network routing equipment",
+            "description": "",
+            "tags": [],
+        }
+        list_beat = {"title": "An obscure routing incident", "keywords": ["router", "network"]}
+        string_beat = {"title": "An obscure routing incident", "keywords": "router network"}
+        self.assertEqual(
+            _asset_relevance("router network", list_beat, asset),
+            _asset_relevance("router network", string_beat, asset),
+        )
+        self.assertTrue(_asset_relevance("router network", string_beat, asset)[0])
+
+    def test_asset_relevance_treats_null_keywords_as_empty_without_crashing(self):
+        asset = {"title": "Router network routing equipment", "description": "", "tags": []}
+        for beat in ({"title": "Unrelated event", "keywords": None}, {"title": "Unrelated event"}):
+            relevant, matched = _asset_relevance("router network", beat, asset)
+            self.assertFalse(relevant)
+            self.assertEqual(matched, ["network", "router"])
+
     def test_singular_and_plural_subject_terms_match_without_substring_matching(self):
         beat = {
             "title": "Internet router network",
