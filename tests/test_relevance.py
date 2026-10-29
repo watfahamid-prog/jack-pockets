@@ -1,6 +1,6 @@
 import unittest
 
-from relevance import _collect_source_urls, _sources_for_urls, _asset_relevance, _asset_search_queries, _relevant_sources
+from relevance import _collect_source_urls, _evidence_url_errors, _sources_for_urls, _asset_relevance, _asset_search_queries, _relevant_sources
 from unittest.mock import patch
 
 import semantic_ranker
@@ -28,6 +28,25 @@ class ApprovedResearchTests(unittest.TestCase):
     def test_empty_selected_list_produces_no_displayable_sources(self):
         result = _sources_for_urls([{"url": "https://example.org/source"}], [])
         self.assertEqual(result, [])
+
+    def test_evidence_gate_rejects_beats_without_sources(self):
+        errors = _evidence_url_errors([
+            {"id": "b1", "source_urls": []},
+            {"id": "b2", "source_urls": ["https://example.org/valid"]},
+        ])
+        self.assertEqual(
+            errors,
+            ["evidence gate: beat has no supporting source_urls: b1"],
+        )
+
+    def test_evidence_gate_rejects_non_http_citation_urls(self):
+        errors = _evidence_url_errors([
+            {"id": "b1", "source_urls": ["javascript:alert(1)"]},
+        ])
+        self.assertEqual(
+            errors,
+            ["evidence gate: invalid source URL in b1"],
+        )
 
     def test_manifest_source_urls_include_only_selected_beat_sources(self):
         result = _collect_source_urls([
