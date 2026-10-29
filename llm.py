@@ -14,7 +14,7 @@ NON_SPECIFIC_VISUAL_TERMS = {
     "the", "and", "for", "with", "from", "into", "onto", "about", "after",
     "before", "what", "when", "where", "which", "while", "would", "could",
     "should", "have", "been", "were", "was", "are", "has", "had",
-    "documentary", "story", "mistake", "forever", "bizarre", "footage", "video",
+    "documentary", "story", "mistake", "incident", "event", "forever", "bizarre", "footage", "video",
     "shot", "shots", "scene", "scenes", "cinematic", "beautiful", "dramatic",
     "sequence", "sweeping", "visual", "visuals", "explained", "revealed",
     "reveals", "secret", "secrets", "journey", "future", "human", "ambition",
