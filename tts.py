@@ -310,7 +310,7 @@ def synthesize(text: str, out: Path) -> Path:
         except Exception as exc:
             raise RuntimeError(
                 "Kokoro was explicitly selected but local synthesis failed; no paid TTS fallback was attempted. "
-                "Install local-experiments-requirements.txt and check the Kokoro voice/model setup. "
+                "Install requirements-kokoro.txt and check the Kokoro voice/model setup. "
                 f"Details: {exc}"
             ) from exc
     if provider not in {"auto", "edge", "piper", "elevenlabs", "openai"}:
