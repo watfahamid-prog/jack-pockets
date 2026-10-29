@@ -72,7 +72,10 @@ def _value_label(sentence: str) -> str:
 
 
 def _span(sentence, words, position):
-    target = [_normalize_token(token) for token in re.findall(r"[a-z0-9]+", sentence.lower())]
+    target = [
+        _normalize_token(re.sub(r"[^a-z0-9]", "", token.lower()))
+        for token in re.findall(r"[a-z0-9]+(?:['’][a-z0-9]+)*", sentence.lower())
+    ]
     flat = [_normalize_token(re.sub(r"[^a-z0-9]", "", str(word.get("word", "")).lower())) for word in words]
     if not target or position >= len(flat):
         return position, min(len(words), position + max(1, len(target)))
