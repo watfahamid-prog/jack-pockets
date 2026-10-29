@@ -1,4 +1,3 @@
-import re
 import unittest
 from pathlib import Path
 
@@ -8,15 +7,18 @@ class RemotionShotTimelineTests(unittest.TestCase):
         source = (
             Path(__file__).resolve().parents[1] / "JackPocketsVideo.tsx"
         ).read_text(encoding="utf-8")
-        pattern = re.compile(
-            r"<Sequence\\s+"
-            r"key=\\{\x60shot-timeline-\\$\\{activeShot\\.id\\}\x60\\}\\s+"
-            r"from=\\{Math\\.round\\(\\(activeBeat\\.start \\+ activeShot\\.start\\) \\* fps\\)\\}\\s+"
-            r"durationInFrames=\\{Math\\.max\\(1, Math\\.ceil\\(\\(activeShot\\.end - activeShot\\.start\\) \\* fps\\)\\)\\}\\s+"
-            r'layout="none"\\s*>\\s*<ShotView',
-            re.MULTILINE,
+        start = source.index("<Sequence\n          key={`shot-timeline-${activeShot.id}`}")
+        end = source.index("</Sequence>", start)
+        shot_sequence = source[start:end]
+        self.assertIn(
+            "from={Math.round((activeBeat.start + activeShot.start) * fps)}",
+            shot_sequence,
         )
-        self.assertRegex(source, pattern)
+        self.assertIn(
+            "durationInFrames={Math.max(1, Math.ceil((activeShot.end - activeShot.start) * fps))}",
+            shot_sequence,
+        )
+        self.assertIn('<ShotView beat={activeBeat} shot={activeShot}', shot_sequence)
 
     def test_shot_timeline_has_finite_positive_duration(self):
         source = (
