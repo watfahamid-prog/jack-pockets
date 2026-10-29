@@ -325,7 +325,7 @@ def _media_license_is_usable(license_url: str, license_name: str = "", creator: 
 
     # Commons sometimes marks public-domain items with a human-readable designation
     # rather than a Creative Commons URL. Accept only explicit PD/CC0 names.
-    label = re.sub(r"\\s+", " ", str(license_name).strip().lower())
+    label = re.sub(r"\s+", " ", str(license_name).strip().lower())
     if label.startswith(("public domain", "pd-", "cc0")):
         return True
     return False
@@ -338,7 +338,7 @@ def _archive_creator(doc: dict) -> str:
     cleaned = []
     for value in values:
         name = re.sub(r"<[^>]+>", " ", str(value or ""))
-        name = re.sub(r"\\s+", " ", name).strip()
+        name = re.sub(r"\s+", " ", name).strip()
         if name and name not in cleaned:
             cleaned.append(name)
     return "; ".join(cleaned)
