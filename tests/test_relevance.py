@@ -82,6 +82,31 @@ class AssetRelevanceTests(unittest.TestCase):
         self.assertIn("router", matched)
         self.assertIn("network", matched)
 
+    def test_singular_and_plural_subject_terms_match_without_substring_matching(self):
+        beat = {
+            "title": "Internet router network",
+            "keywords": ["router network"],
+        }
+        plural_metadata = {
+            "title": "Routers and network switches",
+            "description": "Networks connected through routing equipment",
+            "tags": ["routers", "networks"],
+        }
+        relevant, matched = _asset_relevance("router network", beat, plural_metadata)
+        self.assertTrue(relevant)
+        self.assertEqual(matched, ["network", "router"])
+
+        singular_metadata = {
+            "title": "Router network routing equipment",
+            "description": "",
+            "tags": [],
+        }
+        relevant_reverse, matched_reverse = _asset_relevance(
+            "routers networks", beat, singular_metadata
+        )
+        self.assertTrue(relevant_reverse)
+        self.assertEqual(matched_reverse, ["network", "router"])
+
     def test_accepts_core_technical_subject_when_title_omits_query_modifiers(self):
         beat = {
             "title": "The April 1997 Black Hole",
