@@ -4,8 +4,11 @@ from pathlib import Path
 from editorial_brain import build_shots
 from gemini_editor import refine_beat
 
-def norm(s:str)->list[str]:
-    return re.findall(r"[a-z0-9]+",str(s).lower())
+def norm(s: str) -> list[str]:
+    # Keep internal apostrophes inside contractions, then normalize them away so
+    # text tokens such as "don't" match a Whisper token like "don't" or "dont".
+    tokens = re.findall(r"[a-z0-9]+(?:['’][a-z0-9]+)*", str(s).lower())
+    return [re.sub(r"[^a-z0-9]", "", token) for token in tokens]
 
 def match_span(text:str,words:list[dict],start:int)->tuple[int,int]:
     target=norm(text)
