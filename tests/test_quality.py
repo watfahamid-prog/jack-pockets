@@ -45,6 +45,19 @@ class QualityGateTests(unittest.TestCase):
         errors = validate(self._write(manifest))
         self.assertTrue(any("generated filler role" in error for error in errors))
 
+    def test_rejects_uncovered_gaps_between_beats(self):
+        manifest = self._base()
+        asset1 = {"id": "v1", "kind": "video", "role": "b-roll", "source_url": "https://example.test/v1", "license": "test"}
+        asset2 = {"id": "v2", "kind": "video", "role": "b-roll", "source_url": "https://example.test/v2", "license": "test"}
+        manifest["beats"] = [
+            {"id": "b1", "start": 0, "end": 10, "source_urls": ["https://example.test/source"], "assets": [asset1],
+             "shots": [{"id": "s1", "start": 0, "end": 10, "assetIds": ["v1"], "layers": [{"kind": "image", "assetId": "v1"}]}]},
+            {"id": "b2", "start": 10.6, "end": 480, "source_urls": ["https://example.test/source"], "assets": [asset2],
+             "shots": [{"id": "s2", "start": 0, "end": 469.4, "assetIds": ["v2"], "layers": [{"kind": "image", "assetId": "v2"}]}]},
+        ]
+        errors = validate(self._write(manifest))
+        self.assertTrue(any("visual coverage gap between beats b1 and b2" in error for error in errors))
+
     def test_rejects_overlapping_shots(self):
         manifest = self._base()
         assets = [
