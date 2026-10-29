@@ -95,7 +95,7 @@ def main() -> None:
     # does not spend additional time, downloads, or provider quota.
     evidence_errors = _evidence_url_errors(plan.get("beats", []))
     if evidence_errors:
-        raise SystemExit("QUALITY GATE FAILED:\\n" + "\\n".join(evidence_errors))
+        raise SystemExit("QUALITY GATE FAILED:\n" + "\n".join(evidence_errors))
 
     narration = " ".join(str(beat.get("narration", "")).strip() for beat in plan.get("beats", []))
     audio = root / "narration.mp3"
