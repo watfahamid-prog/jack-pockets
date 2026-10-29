@@ -4,6 +4,21 @@ import re
 from urllib.parse import urlparse
 
 
+def _normalize_asset_term(token: str) -> str:
+    """Normalize common English plurals without broad fuzzy matching or substring hits."""
+    token = token.lower()
+    if len(token) > 5 and token.endswith("ies"):
+        return token[:-3] + "y"
+    if token.endswith("es") and len(token) > 4:
+        stem = token[:-2]
+        if stem.endswith(("s", "x", "z", "ch", "sh")):
+            return stem
+        return token[:-1]
+    if len(token) > 4 and token.endswith("s") and not token.endswith("ss"):
+        return token[:-1]
+    return token
+
+
 def _asset_relevance(query: str, beat: dict, asset: dict) -> tuple[bool, list[str]]:
     """Match stock media to the beat's actual visual subject, not a long narration prompt."""
     stopwords = {
@@ -29,8 +44,9 @@ def _asset_relevance(query: str, beat: dict, asset: dict) -> tuple[bool, list[st
         " ".join(str(x) for x in beat.get("keywords", [])),
     ])
     target = {
-        token for token in re.findall(r"[a-z0-9]{3,}", target_text.lower())
-        if token not in stopwords and not token.isdigit()
+        _normalize_asset_term(token)
+        for token in re.findall(r"[a-z0-9]{3,}", target_text.lower())
+        if _normalize_asset_term(token) not in stopwords and not token.isdigit()
     }
     metadata = " ".join(str(asset.get(key, "")) for key in (
         "title", "description", "tags",
@@ -39,10 +55,14 @@ def _asset_relevance(query: str, beat: dict, asset: dict) -> tuple[bool, list[st
     # in the beat. Otherwise a clip found for "ethernet cable disconnected"
     # can pass just because its description happens to mention another beat
     # keyword such as "terminal" or "network".
-    metadata_terms = set(re.findall(r"[a-z0-9]{3,}", metadata))
+    metadata_terms = {
+        _normalize_asset_term(token)
+        for token in re.findall(r"[a-z0-9]{3,}", metadata)
+    }
     query_terms = {
-        token for token in re.findall(r"[a-z0-9]{3,}", str(query).lower())
-        if token not in stopwords and not token.isdigit()
+        _normalize_asset_term(token)
+        for token in re.findall(r"[a-z0-9]{3,}", str(query).lower())
+        if _normalize_asset_term(token) not in stopwords and not token.isdigit()
     }
     query_hits = sorted(query_terms & metadata_terms)
     # Most stock clips are titled around one concrete subject, not every
