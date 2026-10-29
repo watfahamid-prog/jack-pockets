@@ -156,7 +156,8 @@ def _relevant_sources(topic: str, beat: dict, sources: list[dict], limit: int = 
     distinctive_keyword_terms = keyword_terms - topic_terms
     subject = f"{topic} {beat.get('title', '')} {str(beat.get('narration', ''))[:260]}"
     terms = {
-        token for token in re.findall(r"[a-z0-9]{3,}", subject.lower())
+        _normalize_asset_term(token)
+        for token in re.findall(r"[a-z0-9]{3,}", subject.lower())
         if token not in stopwords and not token.isdigit()
     }
     ranked = []
@@ -171,11 +172,13 @@ def _relevant_sources(topic: str, beat: dict, sources: list[dict], limit: int = 
         # Token-level matching avoids accidental evidence matches such as "net"
         # inside "planet" or "router" inside a longer unrelated word.
         searchable_terms = set(re.findall(r"[a-z0-9]{3,}", searchable))
-        hits = terms & searchable_terms
+        normalized_searchable = {_normalize_asset_term(token) for token in searchable_terms}
+        # Use the same conservative morphology normalization on both sides so
+        # singular/plural variants don't erase otherwise valid source matches.
+        hits = terms & normalized_searchable
         # Topic-level overlap is not sufficient evidence for a particular beat:
         # require at least one of its curated, concrete search keywords to appear
         # in the source title/snippet or URL. Normalize common plurals narrowly.
-        normalized_searchable = {_normalize_asset_term(token) for token in searchable_terms}
         if distinctive_keyword_terms:
             distinctive_hits = distinctive_keyword_terms & normalized_searchable
             required_hits = min(2, len(distinctive_keyword_terms))
