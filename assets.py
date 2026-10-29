@@ -316,6 +316,34 @@ def _archive_license_is_usable(license_url: str) -> bool:
     return bool(re.fullmatch(r"/licenses/by/[0-9.]+(?:/[a-z-]+)?/", path))
 
 
+def _media_license_is_usable(license_url: str, license_name: str = "", creator: str = "") -> bool:
+    """Require a known allowed license and the creator when a CC BY license needs attribution."""
+    if _archive_license_is_usable(license_url):
+        path = urlparse(str(license_url).strip().lower()).path.rstrip("/")
+        needs_credit = bool(re.match(r"/licenses/by/[0-9.]+(?:/|$)", path))
+        return not needs_credit or bool(str(creator).strip())
+
+    # Commons sometimes marks public-domain items with a human-readable designation
+    # rather than a Creative Commons URL. Accept only explicit PD/CC0 names.
+    label = re.sub(r"\\s+", " ", str(license_name).strip().lower())
+    if label.startswith(("public domain", "pd-", "cc0")):
+        return True
+    return False
+
+
+def _archive_creator(doc: dict) -> str:
+    """Normalize Internet Archive creator metadata for license attribution."""
+    raw = doc.get("creator", "")
+    values = raw if isinstance(raw, (list, tuple)) else [raw]
+    cleaned = []
+    for value in values:
+        name = re.sub(r"<[^>]+>", " ", str(value or ""))
+        name = re.sub(r"\\s+", " ", name).strip()
+        if name and name not in cleaned:
+            cleaned.append(name)
+    return "; ".join(cleaned)
+
+
 def search_archive_videos(query:str,out:Path,limit:int=3,beat:dict|None=None)->list[dict]:
     """Search Internet Archive for openly licensed documentary b-roll; no API key required."""
     out.mkdir(parents=True, exist_ok=True)
@@ -343,7 +371,7 @@ def search_archive_videos(query:str,out:Path,limit:int=3,beat:dict|None=None)->l
             response = requests.get(
                 "https://archive.org/advancedsearch.php",
                 params={"q": f"mediatype:movies AND ({expression})",
-                        "fl[]": ["identifier", "title", "description", "licenseurl"],
+                        "fl[]": ["identifier", "title", "description", "licenseurl", "creator"],
                         "rows": 8, "page": 1, "output": "json"},
                 headers=headers, timeout=20)
             response.raise_for_status()
@@ -355,6 +383,7 @@ def search_archive_videos(query:str,out:Path,limit:int=3,beat:dict|None=None)->l
         for doc in docs:
             identifier = str(doc.get("identifier") or "")
             license_url = str(doc.get("licenseurl") or "").lower()
+            creator = _archive_creator(doc)
             if not identifier or identifier in seen:
                 continue
             title = str(doc.get("title") or "")
@@ -390,8 +419,12 @@ def search_archive_videos(query:str,out:Path,limit:int=3,beat:dict|None=None)->l
             # The previous broad URL check also accepted CC-NC/CC-ND, which can
             # block monetization or adaptations. Only accept known commercial/adaptation-
             # friendly Creative Commons options or public-domain markers.
-            if not _archive_license_is_usable(license_url):
-                print(f"[archive] rejected unsupported license={license_url!r}", flush=True)
+            if not _media_license_is_usable(license_url, creator=creator):
+                print(
+                    f"[archive] rejected unsupported license or missing attribution "
+                    f"metadata license={license_url!r}",
+                    flush=True,
+                )
                 continue
             seen.add(identifier)
             try:
@@ -427,9 +460,11 @@ def search_archive_videos(query:str,out:Path,limit:int=3,beat:dict|None=None)->l
                     continue
                 result.append({
                     "id": f"archive-video-{identifier}", "kind": "video", "src": str(path),
-                    "credit": "Internet Archive: " + str(doc.get("title") or identifier),
+                    "credit": creator or ("Internet Archive: " + str(doc.get("title") or identifier)),
+                    "creator": creator,
                     "title": str(doc.get("title") or identifier), "description": str(doc.get("description") or ""),
                     "license": "Internet Archive / " + license_url,
+                    "license_url": license_url,
                     "source_url": f"https://archive.org/details/{identifier}",
                     "score": 0.85, "role": "b-roll", "query": query,
                 })
