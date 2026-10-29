@@ -244,3 +244,27 @@ def _asset_search_queries(beat: dict, limit: int = 4) -> list[str]:
             break
     return normalized
 
+def _approved_sources(sources: list[dict], approved_urls: list[str]) -> list[dict]:
+    """Return source records for approved URLs, preserving approval order.
+
+    Search providers can return several weak or unrelated results. Editorial
+    source cards must only consume results that passed _relevant_sources, and
+    should follow that function's relevance/authority ranking rather than the
+    provider's original response order.
+    """
+    by_url: dict[str, dict] = {}
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        url = str(source.get("url") or "").strip()
+        if url:
+            by_url.setdefault(url, source)
+
+    selected = []
+    seen: set[str] = set()
+    for approved_url in approved_urls:
+        url = str(approved_url or "").strip()
+        if url and url not in seen and url in by_url:
+            selected.append(by_url[url])
+            seen.add(url)
+    return selected
