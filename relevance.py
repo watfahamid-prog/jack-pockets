@@ -7,6 +7,9 @@ from urllib.parse import urlparse
 def _normalize_asset_term(token: str) -> str:
     """Normalize common English plurals without broad fuzzy matching or substring hits."""
     token = token.lower()
+    # These words commonly end in plural-looking suffixes but are not ordinary plurals.
+    if token in {"news", "series", "species", "physics", "politics", "economics", "mathematics", "statistics"}:
+        return token
     if len(token) > 5 and token.endswith("ies"):
         return token[:-3] + "y"
     if token.endswith("es") and len(token) > 4:
