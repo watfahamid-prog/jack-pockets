@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -155,10 +156,25 @@ def validate(path: str) -> list[str]:
                 if kind == "generated" and role in BANNED_GENERATED_ROLES:
                     errors.append(f"graphics gate: generated filler role is not allowed ({asset.get('id')})")
                 if kind in {"video", "photo"}:
-                    if not asset.get("source_url"):
+                    source_url = str(asset.get("source_url") or "").strip()
+                    if not source_url:
                         errors.append(f"provenance gate: real asset has no source_url ({asset.get('id')})")
-                    if not asset.get("license"):
+                    elif not _is_http_url(source_url):
+                        errors.append(f"provenance gate: real asset has invalid source_url ({asset.get('id')})")
+                    license_text = str(asset.get("license") or "").strip()
+                    if not license_text:
                         errors.append(f"provenance gate: real asset has no license ({asset.get('id')})")
+
+                    license_url = str(asset.get("license_url") or "").strip()
+                    if license_url and not _is_http_url(license_url):
+                        errors.append(f"provenance gate: real asset has invalid license_url ({asset.get('id')})")
+                    parsed_license = urlparse(license_url) if license_url and _is_http_url(license_url) else None
+                    license_host = (parsed_license.hostname or "").lower().removeprefix("www.") if parsed_license else ""
+                    license_path = parsed_license.path.rstrip("/") + "/" if parsed_license else ""
+                    cc_by_url = license_host == "creativecommons.org" and license_path.startswith("/licenses/by/")
+                    cc_by_label = bool(re.search(r"\\bcc\\s*by(?:\\s|$)", license_text, re.IGNORECASE))
+                    if (cc_by_url or cc_by_label) and not str(asset.get("creator") or asset.get("credit") or "").strip():
+                        errors.append(f"provenance gate: CC BY asset has no creator credit ({asset.get('id')})")
 
             primary = ids[0] if ids else ""
             if primary and primary == previous_asset:
