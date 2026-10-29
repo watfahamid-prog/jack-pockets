@@ -4,6 +4,24 @@ import re
 from urllib.parse import urlparse
 
 
+def _normalize_asset_term(token: str) -> str:
+    """Normalize common English plurals without broad fuzzy matching or substring hits."""
+    token = token.lower()
+    # These words commonly end in plural-looking suffixes but are not ordinary plurals.
+    if token in {"news", "series", "species", "physics", "politics", "economics", "mathematics", "statistics"}:
+        return token
+    if len(token) > 5 and token.endswith("ies"):
+        return token[:-3] + "y"
+    if token.endswith("es") and len(token) > 4:
+        stem = token[:-2]
+        if stem.endswith(("s", "x", "z", "ch", "sh")):
+            return stem
+        return token[:-1]
+    if len(token) > 4 and token.endswith("s") and not token.endswith("ss"):
+        return token[:-1]
+    return token
+
+
 def _asset_relevance(query: str, beat: dict, asset: dict) -> tuple[bool, list[str]]:
     """Match stock media to the beat's actual visual subject, not a long narration prompt."""
     stopwords = {
@@ -23,14 +41,23 @@ def _asset_relevance(query: str, beat: dict, asset: dict) -> tuple[bool, list[st
         "colorful", "futuristic", "digital", "luminous", "blinking", "glowing",
         "close", "high", "tech",
     }
+    # LLM and fallback planners may serialize keywords as a list, a delimited
+    # string, or null. Normalize the shape explicitly: iterating a string here
+    # would split it into characters, while iterating null would crash acquisition.
+    raw_keywords = beat.get("keywords") or []
+    if isinstance(raw_keywords, str):
+        keyword_text = raw_keywords
+    elif isinstance(raw_keywords, (list, tuple, set)):
+        keyword_text = " ".join(str(item) for item in raw_keywords if item is not None)
+    else:
+        keyword_text = ""
+
     # Use compact editorial metadata; long narration strings contain incidental words.
-    target_text = " ".join([
-        str(beat.get("title", "")),
-        " ".join(str(x) for x in beat.get("keywords", [])),
-    ])
+    target_text = " ".join((str(beat.get("title", "")), keyword_text))
     target = {
-        token for token in re.findall(r"[a-z0-9]{3,}", target_text.lower())
-        if token not in stopwords and not token.isdigit()
+        _normalize_asset_term(token)
+        for token in re.findall(r"[a-z0-9]{3,}", target_text.lower())
+        if _normalize_asset_term(token) not in stopwords and not token.isdigit()
     }
     metadata = " ".join(str(asset.get(key, "")) for key in (
         "title", "description", "tags",
@@ -39,10 +66,14 @@ def _asset_relevance(query: str, beat: dict, asset: dict) -> tuple[bool, list[st
     # in the beat. Otherwise a clip found for "ethernet cable disconnected"
     # can pass just because its description happens to mention another beat
     # keyword such as "terminal" or "network".
-    metadata_terms = set(re.findall(r"[a-z0-9]{3,}", metadata))
+    metadata_terms = {
+        _normalize_asset_term(token)
+        for token in re.findall(r"[a-z0-9]{3,}", metadata)
+    }
     query_terms = {
-        token for token in re.findall(r"[a-z0-9]{3,}", str(query).lower())
-        if token not in stopwords and not token.isdigit()
+        _normalize_asset_term(token)
+        for token in re.findall(r"[a-z0-9]{3,}", str(query).lower())
+        if _normalize_asset_term(token) not in stopwords and not token.isdigit()
     }
     query_hits = sorted(query_terms & metadata_terms)
     # Most stock clips are titled around one concrete subject, not every
@@ -104,9 +135,29 @@ def _relevant_sources(topic: str, beat: dict, sources: list[dict], limit: int = 
         "very", "what", "when", "where", "which", "while", "with", "would",
         "documentary", "story", "mistake", "forever", "bizarre", "internet",
     }
+    raw_keywords = beat.get("keywords") or []
+    if isinstance(raw_keywords, str):
+        raw_keywords = re.split(r"[,;|]", raw_keywords)
+    keyword_terms = {
+        _normalize_asset_term(token)
+        for token in re.findall(
+            r"[a-z0-9]{3,}",
+            " ".join(str(value) for value in raw_keywords).lower(),
+        )
+        if token not in stopwords and not token.isdigit()
+    }
+    topic_terms = {
+        _normalize_asset_term(token)
+        for token in re.findall(r"[a-z0-9]{3,}", str(topic).lower())
+        if token not in stopwords and not token.isdigit()
+    }
+    # Generic topic words (e.g. "diamond" in a documentary about expensive
+    # diamonds) are not enough to establish beat-specific source support.
+    distinctive_keyword_terms = keyword_terms - topic_terms
     subject = f"{topic} {beat.get('title', '')} {str(beat.get('narration', ''))[:260]}"
     terms = {
-        token for token in re.findall(r"[a-z0-9]{3,}", subject.lower())
+        _normalize_asset_term(token)
+        for token in re.findall(r"[a-z0-9]{3,}", subject.lower())
         if token not in stopwords and not token.isdigit()
     }
     ranked = []
@@ -121,7 +172,18 @@ def _relevant_sources(topic: str, beat: dict, sources: list[dict], limit: int = 
         # Token-level matching avoids accidental evidence matches such as "net"
         # inside "planet" or "router" inside a longer unrelated word.
         searchable_terms = set(re.findall(r"[a-z0-9]{3,}", searchable))
-        hits = terms & searchable_terms
+        normalized_searchable = {_normalize_asset_term(token) for token in searchable_terms}
+        # Use the same conservative morphology normalization on both sides so
+        # singular/plural variants don't erase otherwise valid source matches.
+        hits = terms & normalized_searchable
+        # Topic-level overlap is not sufficient evidence for a particular beat:
+        # require at least one of its curated, concrete search keywords to appear
+        # in the source title/snippet or URL. Normalize common plurals narrowly.
+        if distinctive_keyword_terms:
+            distinctive_hits = distinctive_keyword_terms & normalized_searchable
+            required_hits = min(2, len(distinctive_keyword_terms))
+            if len(distinctive_hits) < required_hits:
+                continue
         # Avoid assigning generic or unrelated search results as evidence.
         if len(hits) < 2:
             continue
@@ -221,3 +283,66 @@ def _asset_search_queries(beat: dict, limit: int = 4) -> list[str]:
             break
     return normalized
 
+def _sources_for_urls(sources: list[dict], selected_urls: list[str]) -> list[dict]:
+    """Return source records for approved URLs, preserving approval order.
+
+    Search providers can return several weak or unrelated results. Editorial
+    source cards must only consume results that passed _relevant_sources, and
+    should follow that function's relevance/authority ranking rather than the
+    provider's original response order.
+    """
+    by_url: dict[str, dict] = {}
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        url = str(source.get("url") or "").strip()
+        if url:
+            by_url.setdefault(url, source)
+
+    selected = []
+    seen: set[str] = set()
+    for approved_url in selected_urls:
+        url = str(approved_url or "").strip()
+        if url and url not in seen and url in by_url:
+            selected.append(by_url[url])
+            seen.add(url)
+    return selected
+
+def _collect_source_urls(beats: list[dict]) -> list[str]:
+    """Collect distinct per-beat source URLs for the manifest in stable order."""
+    result: list[str] = []
+    seen: set[str] = set()
+    for beat in beats:
+        if not isinstance(beat, dict):
+            continue
+        urls = beat.get("source_urls") or []
+        if not isinstance(urls, list):
+            continue
+        for value in urls:
+            url = str(value or "").strip()
+            if url and url not in seen:
+                result.append(url)
+                seen.add(url)
+    return result
+
+def _evidence_url_errors(beats: list[dict]) -> list[str]:
+    """Validate per-beat citation URLs before expensive narration/media work begins."""
+    errors: list[str] = []
+    for index, beat in enumerate(beats):
+        if not isinstance(beat, dict):
+            errors.append(f"evidence gate: invalid beat record at position {index + 1}")
+            continue
+        beat_id = str(beat.get("id") or f"beat-{index + 1}")
+        urls = beat.get("source_urls")
+        if not isinstance(urls, list) or not urls:
+            errors.append(f"evidence gate: beat has no supporting source_urls: {beat_id}")
+            continue
+        for value in urls:
+            url = str(value or "").strip()
+            if not url:
+                errors.append(f"evidence gate: empty source URL in {beat_id}")
+                continue
+            parsed = urlparse(url)
+            if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+                errors.append(f"evidence gate: invalid source URL in {beat_id}")
+    return sorted(set(errors))

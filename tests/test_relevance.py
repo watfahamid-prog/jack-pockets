@@ -1,12 +1,80 @@
 import unittest
 
-from relevance import _asset_relevance, _asset_search_queries, _relevant_sources
+from relevance import _collect_source_urls, _evidence_url_errors, _sources_for_urls, _asset_relevance, _asset_search_queries, _relevant_sources
 from unittest.mock import patch
 
 import semantic_ranker
 
 
+class ApprovedResearchTests(unittest.TestCase):
+    def test_only_sources_for_urls_are_returned_in_approval_order(self):
+        weak = {"url": "https://example.org/weak", "title": "Weak unrelated result"}
+        strong = {"url": "https://example.org/strong", "title": "Strong matching source"}
+        result = _sources_for_urls(
+            [weak, strong],
+            ["https://example.org/strong", "https://example.org/not-returned"],
+        )
+        self.assertEqual(result, [strong])
+        self.assertNotIn(weak, result)
+
+    def test_sources_for_urls_are_deduplicated_and_ignore_bad_records(self):
+        source = {"url": "https://example.org/source", "title": "Source"}
+        result = _sources_for_urls(
+            [None, {}, source, {"url": "https://example.org/source", "title": "duplicate"}],
+            ["https://example.org/source", "https://example.org/source"],
+        )
+        self.assertEqual(result, [source])
+
+    def test_empty_selected_list_produces_no_displayable_sources(self):
+        result = _sources_for_urls([{"url": "https://example.org/source"}], [])
+        self.assertEqual(result, [])
+
+    def test_evidence_gate_rejects_beats_without_sources(self):
+        errors = _evidence_url_errors([
+            {"id": "b1", "source_urls": []},
+            {"id": "b2", "source_urls": ["https://example.org/valid"]},
+        ])
+        self.assertEqual(
+            errors,
+            ["evidence gate: beat has no supporting source_urls: b1"],
+        )
+
+    def test_evidence_gate_rejects_non_http_citation_urls(self):
+        errors = _evidence_url_errors([
+            {"id": "b1", "source_urls": ["javascript:alert(1)"]},
+        ])
+        self.assertEqual(
+            errors,
+            ["evidence gate: invalid source URL in b1"],
+        )
+
+    def test_manifest_source_urls_include_only_selected_beat_sources(self):
+        result = _collect_source_urls([
+            {"source_urls": ["https://example.org/a", "https://example.org/b"]},
+            {"source_urls": ["https://example.org/b", "", None]},
+            {"source_urls": []},
+        ])
+        self.assertEqual(result, ["https://example.org/a", "https://example.org/b"])
+
+
 class AssetRelevanceTests(unittest.TestCase):
+    def test_source_relevance_matches_singular_and_plural_subject_terms(self):
+        topic = "Internet reliability"
+        beat = {
+            "title": "Routing hardware problems",
+            "keywords": ["routers network"],
+            "narration": "The router network failed.",
+        }
+        sources = [{
+            "url": "https://nanog.org/incident-report",
+            "title": "Router networks fail",
+            "content": "Routers handle packet delivery during the incident.",
+        }]
+        self.assertEqual(
+            _relevant_sources(topic, beat, sources),
+            ["https://nanog.org/incident-report"],
+        )
+
     def test_media_queries_use_short_subject_phrases_not_full_visual_directions(self):
         beat = {
             "title": "The Emerging Frontier: Commercial Space and Lunar Property",
@@ -81,6 +149,59 @@ class AssetRelevanceTests(unittest.TestCase):
         self.assertTrue(relevant)
         self.assertIn("router", matched)
         self.assertIn("network", matched)
+
+    def test_asset_relevance_accepts_keyword_string_as_well_as_list(self):
+        asset = {
+            "title": "Router network routing equipment",
+            "description": "",
+            "tags": [],
+        }
+        list_beat = {"title": "An obscure routing incident", "keywords": ["router", "network"]}
+        string_beat = {"title": "An obscure routing incident", "keywords": "router network"}
+        self.assertEqual(
+            _asset_relevance("router network", list_beat, asset),
+            _asset_relevance("router network", string_beat, asset),
+        )
+        self.assertTrue(_asset_relevance("router network", string_beat, asset)[0])
+
+    def test_asset_relevance_treats_null_keywords_as_empty_without_crashing(self):
+        asset = {"title": "Router network routing equipment", "description": "", "tags": []}
+        for beat in ({"title": "Unrelated event", "keywords": None}, {"title": "Unrelated event"}):
+            relevant, matched = _asset_relevance("router network", beat, asset)
+            self.assertFalse(relevant)
+            self.assertEqual(matched, ["network", "router"])
+
+    def test_singular_and_plural_subject_terms_match_without_substring_matching(self):
+        beat = {
+            "title": "Internet router network",
+            "keywords": ["router network"],
+        }
+        plural_metadata = {
+            "title": "Routers and network switches",
+            "description": "Networks connected through routing equipment",
+            "tags": ["routers", "networks"],
+        }
+        relevant, matched = _asset_relevance("router network", beat, plural_metadata)
+        self.assertTrue(relevant)
+        self.assertEqual(matched, ["network", "router"])
+
+        singular_metadata = {
+            "title": "Router network routing equipment",
+            "description": "",
+            "tags": [],
+        }
+        relevant_reverse, matched_reverse = _asset_relevance(
+            "routers networks", beat, singular_metadata
+        )
+        self.assertTrue(relevant_reverse)
+        self.assertEqual(matched_reverse, ["network", "router"])
+
+    def test_plural_normalization_does_not_turn_news_into_new(self):
+        beat = {"title": "Daily news report", "keywords": ["news"]}
+        asset = {"title": "New car on a road", "description": "", "tags": []}
+        relevant, matched = _asset_relevance("news", beat, asset)
+        self.assertFalse(relevant)
+        self.assertEqual(matched, [])
 
     def test_accepts_core_technical_subject_when_title_omits_query_modifiers(self):
         beat = {
@@ -237,6 +358,40 @@ class ResearchRelevanceTests(unittest.TestCase):
             sources,
         )
         self.assertEqual(result, ["https://example.org/router-incident"])
+
+    def test_rejects_topic_overlap_when_source_misses_beat_keywords(self):
+        sources = [{
+            "url": "https://example.org/expensive-diamonds",
+            "title": "The world's most expensive diamonds",
+            "content": "Expensive diamonds attract wealthy buyers and record prices.",
+        }]
+        result = _relevant_sources(
+            "The world's most expensive diamonds",
+            {
+                "title": "The Pink Star Auction",
+                "keywords": ["Pink Star diamond", "auction price"],
+                "narration": "The diamond sold for a record price at a major auction.",
+            },
+            sources,
+        )
+        self.assertEqual(result, [])
+
+    def test_keeps_source_with_curated_beat_keyword_overlap(self):
+        sources = [{
+            "url": "https://example.org/pink-star-auction",
+            "title": "Pink Star diamond auction record",
+            "content": "The Pink Star diamond sold at auction for a record price.",
+        }]
+        result = _relevant_sources(
+            "The world's most expensive diamonds",
+            {
+                "title": "The Pink Star Auction",
+                "keywords": ["Pink Star diamond", "auction price"],
+                "narration": "The diamond sold for a record price at a major auction.",
+            },
+            sources,
+        )
+        self.assertEqual(result, ["https://example.org/pink-star-auction"])
 
     def test_prioritizes_authoritative_sources_over_wikipedia_and_blogs(self):
         sources = [

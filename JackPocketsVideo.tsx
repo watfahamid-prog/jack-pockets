@@ -73,7 +73,14 @@ export const JackPocketsVideo: React.FC<{ manifest: VideoManifest }> = ({ manife
 
   return <AbsoluteFill style={{ background: "#101010", overflow: "hidden" }}>
     {activeBeat && activeShot
-      ? <ShotView beat={activeBeat} shot={activeShot} frame={frame} fps={fps} />
+      ? <Sequence
+          key={`shot-timeline-${activeShot.id}`}
+          from={Math.round((activeBeat.start + activeShot.start) * fps)}
+          durationInFrames={Math.max(1, Math.ceil((activeShot.end - activeShot.start) * fps))}
+          layout="none"
+        >
+          <ShotView beat={activeBeat} shot={activeShot} frame={frame} fps={fps} />
+        </Sequence>
       : <AbsoluteFill style={{ background: "#080808" }} />}
     <AbsoluteFill style={{ pointerEvents: "none", zIndex: 80 }}>
       {caption && <div style={{ position: "absolute", left: "12%", right: "12%", bottom: "6%", minHeight: 52, display: "flex", alignItems: "center", justifyContent: "center", padding: "8px 18px", boxSizing: "border-box", background: "rgba(0,0,0,.32)", fontFamily: "Arial,sans-serif", fontSize: "clamp(22px,2.15vw,40px)", fontWeight: 800, color: "#fff", textShadow: "0 2px 12px #000", textAlign: "center" }}>{caption}</div>}

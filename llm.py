@@ -10,6 +10,28 @@ load_dotenv()
 
 MIN_NARRATION_WORDS = 1400
 MIN_BEAT_KEYWORDS = 2
+NON_SPECIFIC_VISUAL_TERMS = {
+    "the", "and", "for", "with", "from", "into", "onto", "about", "after",
+    "before", "what", "when", "where", "which", "while", "would", "could",
+    "should", "have", "been", "were", "was", "are", "has", "had",
+    "documentary", "story", "mistake", "incident", "event", "forever", "bizarre", "footage", "video",
+    "shot", "shots", "scene", "scenes", "cinematic", "beautiful", "dramatic",
+    "sequence", "sweeping", "visual", "visuals", "explained", "revealed",
+    "reveals", "secret", "secrets", "journey", "future", "human", "ambition",
+    "historical", "history", "contemporary", "establishing", "generated",
+    "overview", "interesting", "amazing", "thing", "things", "world",
+}
+
+
+def _concrete_keyword_terms(keywords: list[str]) -> set[str]:
+    """Keep concrete search subjects, not production directions or mood words."""
+    terms = {
+        token.lower()
+        for token in re.findall(r"[a-z0-9]{3,}", " ".join(str(x) for x in keywords).lower())
+        if not token.isdigit()
+    }
+    return terms - NON_SPECIFIC_VISUAL_TERMS
+
 
 SYSTEM = """You are the editorial brain for an automated premium documentary editor.
 Create an ORIGINAL factual long-form documentary plan. Do not copy any existing creator's script, wording, or finished video.
@@ -87,6 +109,10 @@ def _normalize_plan(value, topic: str) -> dict:
         raw_keywords = item.get("keywords", [])
         if isinstance(raw_keywords, str):
             raw_keywords = re.split(r"[,;|]", raw_keywords)
+        elif not isinstance(raw_keywords, (list, tuple)):
+            # Treat malformed optional fields as missing so the explicit keyword
+            # quality gate below reports a useful validation error.
+            raw_keywords = []
         item["keywords"] = list(dict.fromkeys(
             str(keyword).strip().lower()
             for keyword in raw_keywords or []
@@ -95,6 +121,10 @@ def _normalize_plan(value, topic: str) -> dict:
         raw_sources = item.get("source_urls", [])
         if isinstance(raw_sources, str):
             raw_sources = [raw_sources]
+        elif not isinstance(raw_sources, (list, tuple)):
+            # Do not accidentally interpret a dict's keys or other iterables as
+            # approved citation URLs; the evidence gate should see an empty list.
+            raw_sources = []
         item["source_urls"] = list(dict.fromkeys(
             str(url).strip() for url in raw_sources or [] if str(url).strip()
         ))
@@ -112,10 +142,12 @@ def _normalize_plan(value, topic: str) -> dict:
         str(beat.get("title", f"beat-{index}"))
         for index, beat in enumerate(normalized, start=1)
         if len(beat.get("keywords", [])) < MIN_BEAT_KEYWORDS
+        or len(_concrete_keyword_terms(beat.get("keywords", []))) < MIN_BEAT_KEYWORDS
     ]
     if weak_keywords:
         raise ValueError(
-            "beats need at least 2 specific searchable keywords: " + ", ".join(weak_keywords[:4])
+            "beats need at least 2 specific searchable keywords with concrete subject terms: "
+            + ", ".join(weak_keywords[:4])
         )
 
     sentences = []

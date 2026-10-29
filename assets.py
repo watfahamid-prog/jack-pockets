@@ -299,6 +299,51 @@ def search_pixabay(query:str,out:Path,limit:int=3)->list[dict]:
     return result
 
 
+def _archive_license_is_usable(license_url: str) -> bool:
+    """Allow licences suitable for edited/commercial video; reject NC/ND and unknown terms."""
+    parsed = urlparse(str(license_url).strip().lower())
+    host = (parsed.hostname or "").removeprefix("www.")
+    if host != "creativecommons.org":
+        return False
+
+    path = parsed.path.rstrip("/") + "/"
+    if re.fullmatch(r"/publicdomain/(?:zero|mark)/[0-9.]+/", path):
+        return True
+
+    # CC BY permits commercial reuse and adaptations when attribution is respected.
+    # BY-SA has additional share-alike obligations, so keep this automatic selector
+    # conservative and leave it for explicit licensing review.
+    return bool(re.fullmatch(r"/licenses/by/[0-9.]+(?:/[a-z-]+)?/", path))
+
+
+def _media_license_is_usable(license_url: str, license_name: str = "", creator: str = "") -> bool:
+    """Require a known allowed license and the creator when a CC BY license needs attribution."""
+    if _archive_license_is_usable(license_url):
+        path = urlparse(str(license_url).strip().lower()).path.rstrip("/")
+        needs_credit = bool(re.match(r"/licenses/by/[0-9.]+(?:/|$)", path))
+        return not needs_credit or bool(str(creator).strip())
+
+    # Commons sometimes marks public-domain items with a human-readable designation
+    # rather than a Creative Commons URL. Accept only explicit PD/CC0 names.
+    label = re.sub(r"\s+", " ", str(license_name).strip().lower())
+    if label.startswith(("public domain", "pd-", "cc0")):
+        return True
+    return False
+
+
+def _archive_creator(doc: dict) -> str:
+    """Normalize Internet Archive creator metadata for license attribution."""
+    raw = doc.get("creator", "")
+    values = raw if isinstance(raw, (list, tuple)) else [raw]
+    cleaned = []
+    for value in values:
+        name = re.sub(r"<[^>]+>", " ", str(value or ""))
+        name = re.sub(r"\s+", " ", name).strip()
+        if name and name not in cleaned:
+            cleaned.append(name)
+    return "; ".join(cleaned)
+
+
 def search_archive_videos(query:str,out:Path,limit:int=3,beat:dict|None=None)->list[dict]:
     """Search Internet Archive for openly licensed documentary b-roll; no API key required."""
     out.mkdir(parents=True, exist_ok=True)
@@ -326,7 +371,7 @@ def search_archive_videos(query:str,out:Path,limit:int=3,beat:dict|None=None)->l
             response = requests.get(
                 "https://archive.org/advancedsearch.php",
                 params={"q": f"mediatype:movies AND ({expression})",
-                        "fl[]": ["identifier", "title", "description", "licenseurl"],
+                        "fl[]": ["identifier", "title", "description", "licenseurl", "creator"],
                         "rows": 8, "page": 1, "output": "json"},
                 headers=headers, timeout=20)
             response.raise_for_status()
@@ -338,6 +383,7 @@ def search_archive_videos(query:str,out:Path,limit:int=3,beat:dict|None=None)->l
         for doc in docs:
             identifier = str(doc.get("identifier") or "")
             license_url = str(doc.get("licenseurl") or "").lower()
+            creator = _archive_creator(doc)
             if not identifier or identifier in seen:
                 continue
             title = str(doc.get("title") or "")
@@ -370,10 +416,15 @@ def search_archive_videos(query:str,out:Path,limit:int=3,beat:dict|None=None)->l
                         flush=True,
                     )
                     continue
-            # Only use items whose metadata explicitly identifies a permissive/public-domain license.
-            if not any(marker in license_url for marker in (
-                "creativecommons.org/licenses/", "creativecommons.org/publicdomain/",
-                "creativecommons.org/zero/")):
+            # The previous broad URL check also accepted CC-NC/CC-ND, which can
+            # block monetization or adaptations. Only accept known commercial/adaptation-
+            # friendly Creative Commons options or public-domain markers.
+            if not _media_license_is_usable(license_url, creator=creator):
+                print(
+                    f"[archive] rejected unsupported license or missing attribution "
+                    f"metadata license={license_url!r}",
+                    flush=True,
+                )
                 continue
             seen.add(identifier)
             try:
@@ -409,9 +460,11 @@ def search_archive_videos(query:str,out:Path,limit:int=3,beat:dict|None=None)->l
                     continue
                 result.append({
                     "id": f"archive-video-{identifier}", "kind": "video", "src": str(path),
-                    "credit": "Internet Archive: " + str(doc.get("title") or identifier),
+                    "credit": creator or ("Internet Archive: " + str(doc.get("title") or identifier)),
+                    "creator": creator,
                     "title": str(doc.get("title") or identifier), "description": str(doc.get("description") or ""),
                     "license": "Internet Archive / " + license_url,
+                    "license_url": license_url,
                     "source_url": f"https://archive.org/details/{identifier}",
                     "score": 0.85, "role": "b-roll", "query": query,
                 })
@@ -469,6 +522,18 @@ def _commons_search(query:str,out:Path,limit:int=3,kind:str="video",beat:dict|No
         metadata = info.get("extmetadata") or {}
         title = str(page.get("title") or "").replace("File:","").replace("_"," ")
         description = str(metadata.get("ImageDescription", {}).get("value", "") if isinstance(metadata.get("ImageDescription"), dict) else "")
+        artist_value = metadata.get("Artist", {}).get("value", "") if isinstance(metadata.get("Artist"), dict) else ""
+        artist = _archive_creator({"creator": artist_value})[:180]
+        license_value = metadata.get("LicenseShortName", {}).get("value", "") if isinstance(metadata.get("LicenseShortName"), dict) else ""
+        license_url_value = metadata.get("LicenseUrl", {}).get("value", "") if isinstance(metadata.get("LicenseUrl"), dict) else ""
+        license_url = re.sub(r"<[^>]+>", " ", str(license_url_value)).strip()
+        if not _media_license_is_usable(license_url, license_name=str(license_value), creator=artist):
+            print(
+                f"[commons] rejected unsupported license or missing attribution "
+                f"title={title[:100]!r} license={str(license_value)[:80]!r}",
+                flush=True,
+            )
+            continue
         candidate = {"title": title, "description": description, "tags": []}
         if beat is not None:
             relevant, matched_terms = _asset_relevance(query, beat, candidate)
@@ -487,12 +552,10 @@ def _commons_search(query:str,out:Path,limit:int=3,kind:str="video",beat:dict|No
             if path.stat().st_size < 5000:
                 path.unlink(missing_ok=True)
                 continue
-            artist_value = metadata.get("Artist", {}).get("value", "") if isinstance(metadata.get("Artist"), dict) else ""
-            artist = re.sub(r"<[^>]+>", " ", str(artist_value)).strip()[:180]
-            license_value = metadata.get("LicenseShortName", {}).get("value", "Wikimedia Commons") if isinstance(metadata.get("LicenseShortName"), dict) else "Wikimedia Commons"
             result.append({
-                "id": asset_id, "kind": kind, "src": str(path), "title": str(page.get("title") or "").replace("File:","").replace("_"," "), "description": str(metadata.get("ImageDescription", {}).get("value", "") if isinstance(metadata.get("ImageDescription"), dict) else ""), "credit": artist or "Wikimedia Commons contributor",
-                "license": f"Wikimedia Commons / {license_value}", "source_url": "https://commons.wikimedia.org/wiki/" + str(page.get("title", "")).replace(" ", "_"),
+                "id": asset_id, "kind": kind, "src": str(path), "title": str(page.get("title") or "").replace("File:","").replace("_"," "), "description": description, "credit": artist,
+                "license": f"Wikimedia Commons / {license_value}", "license_url": license_url,
+                "creator": artist, "source_url": "https://commons.wikimedia.org/wiki/" + str(page.get("title", "")).replace(" ", "_"),
                 "score": 1.0, "role": "b-roll", "query": clean,
             })
             print(f"[commons] selected {kind}={page.get('title')} bytes={path.stat().st_size}", flush=True)

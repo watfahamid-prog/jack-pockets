@@ -33,7 +33,14 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         env:
           INPUT_TOPIC: ${{ inputs.topic }}
-        run: echo "DOCUMENTARY_TOPIC=$INPUT_TOPIC" >> "$GITHUB_ENV"
+        run: |
+          # Use a random delimiter so multiline input cannot inject extra GITHUB_ENV entries.
+          delimiter="$(openssl rand -hex 24)"
+          {
+            printf 'DOCUMENTARY_TOPIC<<%s\n' "$delimiter"
+            printf '%s\n' "$INPUT_TOPIC"
+            printf '%s\n' "$delimiter"
+          } >> "$GITHUB_ENV"
 
       - name: Setup Node
         uses: actions/setup-node@v4

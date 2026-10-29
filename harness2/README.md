@@ -25,6 +25,8 @@ harness2-demo --output runs/harness2-demo --k 1
 
 The local demo does not require model credentials. Model-backed Harness² recursion can incur API costs, so it remains opt-in.
 
+The run ledger does not treat a `FINAL QC PASSED` log line as proof by itself. It checks that the claimed MP4 exists, that `video-qc.json` identifies the same current file, and that resolution, frame rate, duration, and audio-stream metadata meet the expected technical properties. Structured QC warnings are retained; verified runs with warnings are recorded as `passed_with_warnings` rather than a clean pass.
+
 ## Adoption rule
 
 Harness² is an optimizer for evaluating the documentary pipeline, not a replacement for that pipeline. Candidate improvements must be tested against research accuracy, footage relevance, provenance, and video-quality gates before becoming production defaults.

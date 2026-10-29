@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
+from urllib.parse import urlparse
 
 BANNED_GENERATED_ROLES = {"b-roll", "photo", "texture", "archival photo"}
 STATIC_EVIDENCE_ROLES = {"map", "document", "screenshot", "chart", "archival photo"}
@@ -21,9 +23,48 @@ def _as_float(value, default=0.0) -> float:
         return default
 
 
+def _find_public_root(manifest_path: Path) -> Path:
+    resolved = manifest_path.resolve()
+    for parent in resolved.parents:
+        if parent.name == "public":
+            return parent
+    return (Path.cwd() / "public").resolve()
+
+
+def _is_http_url(value: object) -> bool:
+    if not isinstance(value, str):
+        return False
+    parsed = urlparse(value.strip())
+    return parsed.scheme.lower() in {"http", "https"} and bool(parsed.netloc)
+
+
+def _asset_source_error(asset: dict, public_root: Path) -> str | None:
+    asset_id = str(asset.get("id") or "unknown")
+    source = str(asset.get("src") or "").strip()
+    if not source:
+        return f"asset source gate: missing media src ({asset_id})"
+    if source.startswith(("http://", "https://")):
+        # External media can be intentional; do not make network requests during QC.
+        return None
+
+    source_path = Path(source)
+    if source_path.is_absolute():
+        resolved = source_path.resolve()
+    else:
+        resolved = (public_root / source_path).resolve()
+    try:
+        resolved.relative_to(public_root)
+    except ValueError:
+        return f"asset source gate: local media path escapes public directory ({asset_id})"
+    if not resolved.is_file():
+        return f"asset source gate: local media file does not exist ({asset_id}: {source})"
+    return None
+
+
 def validate(path: str) -> list[str]:
     manifest_path = Path(path)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    public_root = _find_public_root(manifest_path)
     errors: list[str] = []
     if manifest.get("version") != 2:
         errors.append("unsupported manifest version")
@@ -57,7 +98,11 @@ def validate(path: str) -> list[str]:
     consecutive_same = 0
     static_run = 0
     previous_asset = ""
-    all_manifest_sources = {str(url) for url in (manifest.get("sources") or []) if str(url).strip()}
+    raw_manifest_sources = manifest.get("sources") or []
+    all_manifest_sources = {str(url).strip() for url in raw_manifest_sources if str(url).strip()}
+    for source_url in sorted(all_manifest_sources):
+        if not _is_http_url(source_url):
+            errors.append("evidence gate: manifest contains an invalid source URL")
 
     for beat in beats:
         beat_id = str(beat.get("id", "unknown"))
@@ -69,6 +114,8 @@ def validate(path: str) -> list[str]:
                 clean_url = str(url).strip()
                 if not clean_url:
                     errors.append(f"evidence gate: empty source URL in {beat_id}")
+                elif not _is_http_url(clean_url):
+                    errors.append(f"evidence gate: invalid source URL in {beat_id}")
                 elif clean_url not in all_manifest_sources:
                     errors.append(f"evidence gate: beat source is missing from manifest sources: {beat_id}")
         for asset in beat.get("assets", []):
@@ -99,6 +146,9 @@ def validate(path: str) -> list[str]:
             if not ids:
                 errors.append(f"motion gate: shot has no visual asset: {shot.get('id')}")
             for asset in chosen:
+                source_error = _asset_source_error(asset, public_root)
+                if source_error:
+                    errors.append(source_error)
                 kind = str(asset.get("kind", "")).lower()
                 role = str(asset.get("role", "")).lower()
                 if kind in {"photo", "document"} and role not in STATIC_EVIDENCE_ROLES:
@@ -106,10 +156,25 @@ def validate(path: str) -> list[str]:
                 if kind == "generated" and role in BANNED_GENERATED_ROLES:
                     errors.append(f"graphics gate: generated filler role is not allowed ({asset.get('id')})")
                 if kind in {"video", "photo"}:
-                    if not asset.get("source_url"):
+                    source_url = str(asset.get("source_url") or "").strip()
+                    if not source_url:
                         errors.append(f"provenance gate: real asset has no source_url ({asset.get('id')})")
-                    if not asset.get("license"):
+                    elif not _is_http_url(source_url):
+                        errors.append(f"provenance gate: real asset has invalid source_url ({asset.get('id')})")
+                    license_text = str(asset.get("license") or "").strip()
+                    if not license_text:
                         errors.append(f"provenance gate: real asset has no license ({asset.get('id')})")
+
+                    license_url = str(asset.get("license_url") or "").strip()
+                    if license_url and not _is_http_url(license_url):
+                        errors.append(f"provenance gate: real asset has invalid license_url ({asset.get('id')})")
+                    parsed_license = urlparse(license_url) if license_url and _is_http_url(license_url) else None
+                    license_host = (parsed_license.hostname or "").lower().removeprefix("www.") if parsed_license else ""
+                    license_path = parsed_license.path.rstrip("/") + "/" if parsed_license else ""
+                    cc_by_url = license_host == "creativecommons.org" and license_path.startswith("/licenses/by/")
+                    cc_by_label = bool(re.search(r"\bcc\s*by(?:\s|$)", license_text, re.IGNORECASE))
+                    if (cc_by_url or cc_by_label) and not str(asset.get("creator") or asset.get("credit") or "").strip():
+                        errors.append(f"provenance gate: CC BY asset has no creator credit ({asset.get('id')})")
 
             primary = ids[0] if ids else ""
             if primary and primary == previous_asset:
@@ -138,6 +203,7 @@ def validate(path: str) -> list[str]:
         errors.append(f"repetition gate: a visual is reused more than {MAX_VISUAL_REUSE} times ({details})")
 
     last_beat_end = 0.0
+    previous_beat_id = ""
     for beat in beats:
         beat_id = str(beat.get("id", "unknown"))
         start = _as_float(beat.get("start"))
@@ -145,9 +211,18 @@ def validate(path: str) -> list[str]:
         beat_duration = max(0.0, end - start)
         if start < last_beat_end - 0.05:
             errors.append(f"overlapping beat: {beat_id}")
+        if start - last_beat_end > MAX_COVERAGE_GAP:
+            if previous_beat_id:
+                errors.append(
+                    f"visual coverage gap between beats {previous_beat_id} and {beat_id}: "
+                    f"{start - last_beat_end:.2f}s"
+                )
+            else:
+                errors.append(f"visual coverage gap at documentary start: {start:.2f}s")
         if end <= start:
             errors.append(f"invalid beat timing: {beat_id}")
         last_beat_end = end
+        previous_beat_id = beat_id
         assets = {str(asset.get("id")) for asset in beat.get("assets", []) if asset.get("id")}
         shots = beat.get("shots", [])
         if not shots:
