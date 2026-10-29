@@ -1,33 +1,41 @@
 import unittest
 
-from relevance import _approved_sources, _asset_relevance, _asset_search_queries, _relevant_sources
+from relevance import _collect_source_urls, _sources_for_urls, _asset_relevance, _asset_search_queries, _relevant_sources
 from unittest.mock import patch
 
 import semantic_ranker
 
 
 class ApprovedResearchTests(unittest.TestCase):
-    def test_only_approved_sources_are_returned_in_approval_order(self):
+    def test_only_sources_for_urls_are_returned_in_approval_order(self):
         weak = {"url": "https://example.org/weak", "title": "Weak unrelated result"}
         strong = {"url": "https://example.org/strong", "title": "Strong matching source"}
-        result = _approved_sources(
+        result = _sources_for_urls(
             [weak, strong],
             ["https://example.org/strong", "https://example.org/not-returned"],
         )
         self.assertEqual(result, [strong])
         self.assertNotIn(weak, result)
 
-    def test_approved_sources_are_deduplicated_and_ignore_bad_records(self):
+    def test_sources_for_urls_are_deduplicated_and_ignore_bad_records(self):
         source = {"url": "https://example.org/source", "title": "Source"}
-        result = _approved_sources(
+        result = _sources_for_urls(
             [None, {}, source, {"url": "https://example.org/source", "title": "duplicate"}],
             ["https://example.org/source", "https://example.org/source"],
         )
         self.assertEqual(result, [source])
 
-    def test_empty_approved_list_produces_no_displayable_sources(self):
-        result = _approved_sources([{"url": "https://example.org/source"}], [])
+    def test_empty_selected_list_produces_no_displayable_sources(self):
+        result = _sources_for_urls([{"url": "https://example.org/source"}], [])
         self.assertEqual(result, [])
+
+    def test_manifest_source_urls_include_only_selected_beat_sources(self):
+        result = _collect_source_urls([
+            {"source_urls": ["https://example.org/a", "https://example.org/b"]},
+            {"source_urls": ["https://example.org/b", "", None]},
+            {"source_urls": []},
+        ])
+        self.assertEqual(result, ["https://example.org/a", "https://example.org/b"])
 
 
 class AssetRelevanceTests(unittest.TestCase):
