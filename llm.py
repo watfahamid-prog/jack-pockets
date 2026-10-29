@@ -109,6 +109,10 @@ def _normalize_plan(value, topic: str) -> dict:
         raw_keywords = item.get("keywords", [])
         if isinstance(raw_keywords, str):
             raw_keywords = re.split(r"[,;|]", raw_keywords)
+        elif not isinstance(raw_keywords, (list, tuple)):
+            # Treat malformed optional fields as missing so the explicit keyword
+            # quality gate below reports a useful validation error.
+            raw_keywords = []
         item["keywords"] = list(dict.fromkeys(
             str(keyword).strip().lower()
             for keyword in raw_keywords or []
@@ -117,6 +121,10 @@ def _normalize_plan(value, topic: str) -> dict:
         raw_sources = item.get("source_urls", [])
         if isinstance(raw_sources, str):
             raw_sources = [raw_sources]
+        elif not isinstance(raw_sources, (list, tuple)):
+            # Do not accidentally interpret a dict's keys or other iterables as
+            # approved citation URLs; the evidence gate should see an empty list.
+            raw_sources = []
         item["source_urls"] = list(dict.fromkeys(
             str(url).strip() for url in raw_sources or [] if str(url).strip()
         ))
