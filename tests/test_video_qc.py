@@ -1,6 +1,8 @@
 import json
 import tempfile
 import unittest
+import sys
+from types import ModuleType
 from pathlib import Path
 from unittest.mock import patch, Mock
 import video_qc
@@ -53,11 +55,17 @@ class VideoQCTests(unittest.TestCase):
                 "format": {"duration": "600"},
             }
             successful_scan = Mock(stderr="", stdout="", returncode=0)
-            with patch.object(video_qc.shutil, "which", return_value="/usr/bin/tool"), patch.object(
+            fake_scene = ModuleType("scenedetect")
+            fake_detectors = ModuleType("scenedetect.detectors")
+            fake_scene.open_video = Mock(return_value=object())
+            fake_scene.SceneManager = Mock(side_effect=RuntimeError("scene failure"))
+            fake_detectors.ContentDetector = Mock(return_value=object())
+            with patch.dict(sys.modules, {
+                "scenedetect": fake_scene,
+                "scenedetect.detectors": fake_detectors,
+            }), patch.object(video_qc.shutil, "which", return_value="/usr/bin/tool"), patch.object(
                 video_qc, "_run", return_value=json.dumps(probe)
-            ), patch.object(video_qc.subprocess, "run", return_value=successful_scan), patch(
-                "scenedetect.open_video", side_effect=RuntimeError("decode failure")
-            ), patch("scenedetect.SceneManager", side_effect=RuntimeError("scene failure")):
+            ), patch.object(video_qc.subprocess, "run", return_value=successful_scan):
                 report = video_qc.inspect_video(str(video), use_scene_detect=True)
         self.assertTrue(report["scene_detection"].startswith("error:"))
         self.assertTrue(any("Scene-change analysis failed" in item for item in report["warnings"]))
