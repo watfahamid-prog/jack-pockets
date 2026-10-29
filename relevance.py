@@ -168,8 +168,11 @@ def _relevant_sources(topic: str, beat: dict, sources: list[dict], limit: int = 
         # require at least one of its curated, concrete search keywords to appear
         # in the source title/snippet or URL. Normalize common plurals narrowly.
         normalized_searchable = {_normalize_asset_term(token) for token in searchable_terms}
-        if distinctive_keyword_terms and not (distinctive_keyword_terms & normalized_searchable):
-            continue
+        if distinctive_keyword_terms:
+            distinctive_hits = distinctive_keyword_terms & normalized_searchable
+            required_hits = min(2, len(distinctive_keyword_terms))
+            if len(distinctive_hits) < required_hits:
+                continue
         # Avoid assigning generic or unrelated search results as evidence.
         if len(hits) < 2:
             continue
