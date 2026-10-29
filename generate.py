@@ -12,7 +12,7 @@ from pathlib import Path
 from assets import generate_role_asset, make_asset_plan, reset_asset_download_budget, search_pexels, search_pexels_videos, search_pixabay, search_pixabay_videos, search_commons_videos, search_commons_photos, search_archive_videos
 from llm import generate
 from manifest import build
-from relevance import _collect_source_urls, _sources_for_urls, _asset_relevance, _asset_search_queries, _relevant_sources
+from relevance import _collect_source_urls, _evidence_url_errors, _sources_for_urls, _asset_relevance, _asset_search_queries, _relevant_sources
 from music import get_music
 from quality import validate
 from research import search_web
@@ -89,6 +89,13 @@ def main() -> None:
     plan["sources"] = _collect_source_urls(plan.get("beats", []))
     (root / "research.json").write_text(json.dumps(research, indent=2), encoding="utf-8")
     (root / "plan.json").write_text(json.dumps(plan, indent=2), encoding="utf-8")
+
+    # The existing final quality gate rejects missing/invalid beat citations.
+    # Fail before TTS and media acquisition so a plan that cannot pass the gate
+    # does not spend additional time, downloads, or provider quota.
+    evidence_errors = _evidence_url_errors(plan.get("beats", []))
+    if evidence_errors:
+        raise SystemExit("QUALITY GATE FAILED:\\n" + "\\n".join(evidence_errors))
 
     narration = " ".join(str(beat.get("narration", "")).strip() for beat in plan.get("beats", []))
     audio = root / "narration.mp3"
