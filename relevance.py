@@ -41,11 +41,19 @@ def _asset_relevance(query: str, beat: dict, asset: dict) -> tuple[bool, list[st
         "colorful", "futuristic", "digital", "luminous", "blinking", "glowing",
         "close", "high", "tech",
     }
+    # LLM and fallback planners may serialize keywords as a list, a delimited
+    # string, or null. Normalize the shape explicitly: iterating a string here
+    # would split it into characters, while iterating null would crash acquisition.
+    raw_keywords = beat.get("keywords") or []
+    if isinstance(raw_keywords, str):
+        keyword_text = raw_keywords
+    elif isinstance(raw_keywords, (list, tuple, set)):
+        keyword_text = " ".join(str(item) for item in raw_keywords if item is not None)
+    else:
+        keyword_text = ""
+
     # Use compact editorial metadata; long narration strings contain incidental words.
-    target_text = " ".join([
-        str(beat.get("title", "")),
-        " ".join(str(x) for x in beat.get("keywords", [])),
-    ])
+    target_text = " ".join((str(beat.get("title", "")), keyword_text))
     target = {
         _normalize_asset_term(token)
         for token in re.findall(r"[a-z0-9]{3,}", target_text.lower())
