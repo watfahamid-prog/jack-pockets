@@ -138,6 +138,7 @@ def validate(path: str) -> list[str]:
         errors.append(f"repetition gate: a visual is reused more than {MAX_VISUAL_REUSE} times ({details})")
 
     last_beat_end = 0.0
+    previous_beat_id = ""
     for beat in beats:
         beat_id = str(beat.get("id", "unknown"))
         start = _as_float(beat.get("start"))
@@ -145,9 +146,18 @@ def validate(path: str) -> list[str]:
         beat_duration = max(0.0, end - start)
         if start < last_beat_end - 0.05:
             errors.append(f"overlapping beat: {beat_id}")
+        if start - last_beat_end > MAX_COVERAGE_GAP:
+            if previous_beat_id:
+                errors.append(
+                    f"visual coverage gap between beats {previous_beat_id} and {beat_id}: "
+                    f"{start - last_beat_end:.2f}s"
+                )
+            else:
+                errors.append(f"visual coverage gap at documentary start: {start:.2f}s")
         if end <= start:
             errors.append(f"invalid beat timing: {beat_id}")
         last_beat_end = end
+        previous_beat_id = beat_id
         assets = {str(asset.get("id")) for asset in beat.get("assets", []) if asset.get("id")}
         shots = beat.get("shots", [])
         if not shots:
