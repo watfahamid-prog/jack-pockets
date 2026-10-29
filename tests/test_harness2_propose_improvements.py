@@ -30,6 +30,17 @@ class Harness2ImprovementProposalTests(unittest.TestCase):
         self.assertEqual(quality["evidence_count"], 2)
         self.assertEqual(quality["status"], "proposed_not_adopted")
 
+    def test_repeated_stale_video_qc_evidence_creates_quality_gate_proposal(self):
+        observation = "video QC report is stale or lacks a verifiable MP4 file signature"
+        result = build_proposals({"runs": [
+            {"observations": [observation]},
+            {"observations": [observation]},
+        ]})
+        quality = next((item for item in result["proposals"] if item["id"] == "quality-gate"), None)
+        self.assertIsNotNone(quality)
+        self.assertEqual(quality["evidence_count"], 2)
+        self.assertEqual(quality["status"], "proposed_not_adopted")
+
     def test_single_observation_does_not_create_proposal(self):
         result = build_proposals({"runs": [{"observations": ["provider search failed"]}]})
         self.assertEqual(result["proposals"], [])
