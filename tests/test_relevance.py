@@ -1,9 +1,33 @@
 import unittest
 
-from relevance import _asset_relevance, _asset_search_queries, _relevant_sources
+from relevance import _approved_sources, _asset_relevance, _asset_search_queries, _relevant_sources
 from unittest.mock import patch
 
 import semantic_ranker
+
+
+class ApprovedResearchTests(unittest.TestCase):
+    def test_only_approved_sources_are_returned_in_approval_order(self):
+        weak = {"url": "https://example.org/weak", "title": "Weak unrelated result"}
+        strong = {"url": "https://example.org/strong", "title": "Strong matching source"}
+        result = _approved_sources(
+            [weak, strong],
+            ["https://example.org/strong", "https://example.org/not-returned"],
+        )
+        self.assertEqual(result, [strong])
+        self.assertNotIn(weak, result)
+
+    def test_approved_sources_are_deduplicated_and_ignore_bad_records(self):
+        source = {"url": "https://example.org/source", "title": "Source"}
+        result = _approved_sources(
+            [None, {}, source, {"url": "https://example.org/source", "title": "duplicate"}],
+            ["https://example.org/source", "https://example.org/source"],
+        )
+        self.assertEqual(result, [source])
+
+    def test_empty_approved_list_produces_no_displayable_sources(self):
+        result = _approved_sources([{"url": "https://example.org/source"}], [])
+        self.assertEqual(result, [])
 
 
 class AssetRelevanceTests(unittest.TestCase):
