@@ -33,6 +33,22 @@ class ArchiveLicensePolicyTests(unittest.TestCase):
             "https://creativecommons.org/publicdomain/zero/1.0/"
         ))
 
+    def test_commons_supported_policy_requires_known_license_and_attribution(self):
+        self.assertTrue(_media_license_is_usable(
+            "https://creativecommons.org/licenses/by/4.0/",
+            license_name="CC BY 4.0", creator="Creator",
+        ))
+        self.assertFalse(_media_license_is_usable(
+            "https://creativecommons.org/licenses/by-sa/4.0/",
+            license_name="CC BY-SA 4.0", creator="Creator",
+        ))
+        self.assertFalse(_media_license_is_usable(
+            "", license_name="Wikimedia Commons", creator="Creator",
+        ))
+        self.assertTrue(_media_license_is_usable(
+            "", license_name="Public domain", creator="",
+        ))
+
     def test_creator_metadata_collapses_whitespace_and_removes_markup(self):
         self.assertEqual(
             _archive_creator({"creator": "<span>Jane\n    Doe</span>"}),
