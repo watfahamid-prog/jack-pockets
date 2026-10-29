@@ -321,6 +321,40 @@ class ResearchRelevanceTests(unittest.TestCase):
         )
         self.assertEqual(result, ["https://example.org/router-incident"])
 
+    def test_rejects_topic_overlap_when_source_misses_beat_keywords(self):
+        sources = [{
+            "url": "https://example.org/expensive-diamonds",
+            "title": "The world's most expensive diamonds",
+            "content": "Expensive diamonds attract wealthy buyers and record prices.",
+        }]
+        result = _relevant_sources(
+            "The world's most expensive diamonds",
+            {
+                "title": "The Pink Star Auction",
+                "keywords": ["Pink Star diamond", "auction price"],
+                "narration": "The diamond sold for a record price at a major auction.",
+            },
+            sources,
+        )
+        self.assertEqual(result, [])
+
+    def test_keeps_source_with_curated_beat_keyword_overlap(self):
+        sources = [{
+            "url": "https://example.org/pink-star-auction",
+            "title": "Pink Star diamond auction record",
+            "content": "The Pink Star diamond sold at auction for a record price.",
+        }]
+        result = _relevant_sources(
+            "The world's most expensive diamonds",
+            {
+                "title": "The Pink Star Auction",
+                "keywords": ["Pink Star diamond", "auction price"],
+                "narration": "The diamond sold for a record price at a major auction.",
+            },
+            sources,
+        )
+        self.assertEqual(result, ["https://example.org/pink-star-auction"])
+
     def test_prioritizes_authoritative_sources_over_wikipedia_and_blogs(self):
         sources = [
             {
