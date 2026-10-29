@@ -244,7 +244,7 @@ def _asset_search_queries(beat: dict, limit: int = 4) -> list[str]:
             break
     return normalized
 
-def _approved_sources(sources: list[dict], approved_urls: list[str]) -> list[dict]:
+def _sources_for_urls(sources: list[dict], selected_urls: list[str]) -> list[dict]:
     """Return source records for approved URLs, preserving approval order.
 
     Search providers can return several weak or unrelated results. Editorial
@@ -262,9 +262,26 @@ def _approved_sources(sources: list[dict], approved_urls: list[str]) -> list[dic
 
     selected = []
     seen: set[str] = set()
-    for approved_url in approved_urls:
+    for approved_url in selected_urls:
         url = str(approved_url or "").strip()
         if url and url not in seen and url in by_url:
             selected.append(by_url[url])
             seen.add(url)
     return selected
+
+def _collect_source_urls(beats: list[dict]) -> list[str]:
+    """Collect distinct per-beat source URLs for the manifest in stable order."""
+    result: list[str] = []
+    seen: set[str] = set()
+    for beat in beats:
+        if not isinstance(beat, dict):
+            continue
+        urls = beat.get("source_urls") or []
+        if not isinstance(urls, list):
+            continue
+        for value in urls:
+            url = str(value or "").strip()
+            if url and url not in seen:
+                result.append(url)
+                seen.add(url)
+    return result
