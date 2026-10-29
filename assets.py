@@ -310,10 +310,10 @@ def _archive_license_is_usable(license_url: str) -> bool:
     if re.fullmatch(r"/publicdomain/(?:zero|mark)/[0-9.]+/", path):
         return True
 
-    # CC BY and CC BY-SA permit commercial reuse and adaptations when attribution
-    # and applicable share-alike terms are respected. NC and ND variants are not
-    # acceptable defaults for a monetized, edited documentary pipeline.
-    return bool(re.fullmatch(r"/licenses/(?:by|by-sa)/[0-9.]+(?:/[a-z-]+)?/", path))
+    # CC BY permits commercial reuse and adaptations when attribution is respected.
+    # BY-SA has additional share-alike obligations, so keep this automatic selector
+    # conservative and leave it for explicit licensing review.
+    return bool(re.fullmatch(r"/licenses/by/[0-9.]+(?:/[a-z-]+)?/", path))
 
 
 def search_archive_videos(query:str,out:Path,limit:int=3,beat:dict|None=None)->list[dict]:
