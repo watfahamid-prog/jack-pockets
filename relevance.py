@@ -138,6 +138,14 @@ def _relevant_sources(topic: str, beat: dict, sources: list[dict], limit: int = 
         )
         if token not in stopwords and not token.isdigit()
     }
+    topic_terms = {
+        _normalize_asset_term(token)
+        for token in re.findall(r"[a-z0-9]{3,}", str(topic).lower())
+        if token not in stopwords and not token.isdigit()
+    }
+    # Generic topic words (e.g. "diamond" in a documentary about expensive
+    # diamonds) are not enough to establish beat-specific source support.
+    distinctive_keyword_terms = keyword_terms - topic_terms
     subject = f"{topic} {beat.get('title', '')} {str(beat.get('narration', ''))[:260]}"
     terms = {
         token for token in re.findall(r"[a-z0-9]{3,}", subject.lower())
@@ -160,7 +168,7 @@ def _relevant_sources(topic: str, beat: dict, sources: list[dict], limit: int = 
         # require at least one of its curated, concrete search keywords to appear
         # in the source title/snippet or URL. Normalize common plurals narrowly.
         normalized_searchable = {_normalize_asset_term(token) for token in searchable_terms}
-        if keyword_terms and not (keyword_terms & normalized_searchable):
+        if distinctive_keyword_terms and not (distinctive_keyword_terms & normalized_searchable):
             continue
         # Avoid assigning generic or unrelated search results as evidence.
         if len(hits) < 2:
