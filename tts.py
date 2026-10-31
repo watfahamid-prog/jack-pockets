@@ -253,11 +253,15 @@ def _audio_cache_path(text: str) -> Path:
         "provider": os.getenv("TTS_PROVIDER", "auto"),
         "kokoro_voice": os.getenv("KOKORO_VOICE", "af_heart"),
         "kokoro_lang_code": os.getenv("KOKORO_LANG_CODE", "a"),
+        "kokoro_speed": os.getenv("KOKORO_SPEED", "1.0"),
+        "piper_model": os.getenv("PIPER_MODEL", "en_US-lessac-medium"),
         "elevenlabs_voice": os.getenv("ELEVENLABS_VOICE_ID", ""),
         "elevenlabs_model": os.getenv("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2"),
         "openai_model": os.getenv("OPENAI_TTS_MODEL", "gpt-4o-mini-tts"),
         "openai_voice": os.getenv("OPENAI_TTS_VOICE", "alloy"),
         "edge_voice": os.getenv("TTS_VOICE", DEFAULT_VOICE),
+        "edge_rate": os.getenv("TTS_RATE", "+0%"),
+        "edge_volume": os.getenv("TTS_VOLUME", "+0%"),
         "elevenlabs_available": bool(os.getenv("ELEVENLABS_API_KEY", "").strip()),
         "openai_available": bool(os.getenv("OPENAI_API_KEY", "").strip()),
     }
@@ -306,7 +310,7 @@ def synthesize(text: str, out: Path) -> Path:
         except Exception as exc:
             raise RuntimeError(
                 "Kokoro was explicitly selected but local synthesis failed; no paid TTS fallback was attempted. "
-                "Install local-experiments-requirements.txt and check the Kokoro voice/model setup. "
+                "Install requirements-kokoro.txt and check the Kokoro voice/model setup. "
                 f"Details: {exc}"
             ) from exc
     if provider not in {"auto", "edge", "piper", "elevenlabs", "openai"}:

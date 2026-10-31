@@ -78,6 +78,32 @@ class TTSFallbackTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "All available narration providers failed"):
                 tts.synthesize("A documentary narration.", self.out)
 
+    def test_audio_cache_key_tracks_synthesis_settings(self):
+        base = {
+            "JACKPOCKETS_CACHE_DIR": "test-cache",
+            "TTS_PROVIDER": "auto",
+            "TTS_VOICE": "en-US-GuyNeural",
+            "TTS_RATE": "+0%",
+            "TTS_VOLUME": "+0%",
+            "PIPER_MODEL": "en_US-lessac-medium",
+            "KOKORO_SPEED": "1.0",
+        }
+        with patch.dict(os.environ, base, clear=True):
+            original = tts._audio_cache_path("A documentary narration.")
+
+        for setting, changed_value in (
+            ("TTS_RATE", "+10%"),
+            ("TTS_VOLUME", "+10%"),
+            ("PIPER_MODEL", "en_US-amy-medium"),
+            ("KOKORO_SPEED", "1.15"),
+        ):
+            with self.subTest(setting=setting), patch.dict(
+                os.environ, {**base, setting: changed_value}, clear=True
+            ):
+                self.assertNotEqual(
+                    tts._audio_cache_path("A documentary narration."), original
+                )
+
     def test_explicit_kokoro_never_falls_back_to_paid_providers(self):
         with patch.dict(os.environ, {"TTS_PROVIDER": "kokoro"}, clear=False), \
              patch.object(tts, "_synthesize_kokoro") as kokoro, \
@@ -94,8 +120,9 @@ class TTSFallbackTests(unittest.TestCase):
              patch.object(tts, "_synthesize_kokoro", side_effect=RuntimeError("local model unavailable")), \
              patch.object(tts, "_synthesize_elevenlabs") as eleven, \
              patch.object(tts, "_synthesize_openai") as openai:
-            with self.assertRaisesRegex(RuntimeError, "no paid TTS fallback"):
+            with self.assertRaisesRegex(RuntimeError, "no paid TTS fallback") as raised:
                 tts.synthesize("A documentary narration.", self.out)
+        self.assertIn("requirements-kokoro.txt", str(raised.exception))
         eleven.assert_not_called()
         openai.assert_not_called()
 
