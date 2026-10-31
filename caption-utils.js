@@ -1,4 +1,5 @@
 export const CAPTION_GAP_TOLERANCE_SECONDS = 0.22;
+const MAX_CAPTION_WORDS = 7;
 
 /**
  * Return the current short caption phrase. Word timestamps often leave tiny gaps
@@ -28,9 +29,9 @@ export function captionAt(words, time) {
 
   const endsSentence = word => /[.!?]["')\]]?$/.test(String(word).trim());
   let start = index;
-  while (start > 0 && index - start < 6 && !endsSentence(words[start - 1].word)) start--;
+  while (start > 0 && index - start < MAX_CAPTION_WORDS - 1 && !endsSentence(words[start - 1].word)) start--;
 
-  let end = Math.min(words.length, start + 7);
+  let end = Math.min(words.length, start + MAX_CAPTION_WORDS);
   for (let i = start; i < end; i++) {
     if (i >= index && endsSentence(words[i].word)) {
       end = i + 1;
@@ -38,8 +39,8 @@ export function captionAt(words, time) {
     }
   }
   if (index >= end) {
-    start = Math.max(0, index - 3);
-    end = Math.min(words.length, start + 7);
+    start = Math.max(0, index - Math.floor((MAX_CAPTION_WORDS - 1) / 2));
+    end = Math.min(words.length, start + MAX_CAPTION_WORDS);
   }
   return words.slice(start, end).map(item => String(item.word).trim()).filter(Boolean).join(" ");
 }
